@@ -1,0 +1,52 @@
+import { z } from "zod";
+
+export const LEAD_STAGES = [
+  "NEW",
+  "CONTACTED",
+  "INTERESTED",
+  "READY_TO_BUY",
+  "CUSTOMER",
+  "LOST",
+] as const;
+export type LeadStageValue = (typeof LEAD_STAGES)[number];
+
+export const LEAD_STAGE_LABELS: Record<LeadStageValue, string> = {
+  NEW: "Nuevo",
+  CONTACTED: "Contactado",
+  INTERESTED: "Interesado",
+  READY_TO_BUY: "Listo para comprar",
+  CUSTOMER: "Cliente",
+  LOST: "Perdido",
+};
+
+export const createLeadSchema = z.object({
+  contactName: z.string().min(2).max(80),
+  businessName: z.string().max(80).nullable().optional(),
+  phone: z.string().min(7).max(20),
+  address: z.string().max(200).nullable().optional(),
+  industry: z.string().max(80).nullable().optional(),
+  productInterest: z.string().max(200).nullable().optional(),
+  reasonNotBought: z.string().max(500).nullable().optional(),
+});
+export type CreateLeadInput = z.infer<typeof createLeadSchema>;
+
+export const updateLeadSchema = createLeadSchema.partial().extend({
+  stage: z.enum(LEAD_STAGES).optional(),
+});
+export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
+
+export interface LeadDto {
+  id: string;
+  contactName: string;
+  businessName: string | null;
+  phone: string;
+  address: string | null;
+  industry: string | null;
+  productInterest: string | null;
+  reasonNotBought: string | null;
+  stage: LeadStageValue;
+  source: string;
+  lastContactAt: string | null;
+  createdAt: string;
+  openersCount: number;
+}
