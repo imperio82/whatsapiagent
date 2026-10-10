@@ -2,7 +2,8 @@ import type { UseCase } from "@shared/domain/use-case";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import type { AIProvider, ChatMessage, ChatTurnOutput } from "../domain/ports/ai-provider";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
-import { buildSystemPrompt } from "../infrastructure/system-prompt";
+import { buildBusinessContext, buildSystemPrompt, type SystemPromptInput } from "../infrastructure/system-prompt";
+import { runSalesGraph, type TraceStep } from "../infrastructure/graph/sales-graph";
 import { buildTools } from "../infrastructure/tools";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
 
@@ -15,6 +16,25 @@ export interface RespondInput {
 }
 
 const MAX_CONTEXT_MESSAGES = 20;
+
+/** Tiempo que la IA deja de responder una conversación después de pasarla a una persona. */
+const HANDOFF_PAUSE_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Motor de respuesta (AI_ENGINE en el .env):
+ * - "graph" (por defecto): grafo multiagente con router, especialistas y verificador.
+ * - "simple": un solo agente con todas las herramientas.
+ */
+function aiEngine(): "graph" | "simple" {
+  return process.env.AI_ENGINE === "simple" ? "simple" : "graph";
+}
+
+interface TurnResult extends ChatTurnOutput {
+  provider: string;
+  intent?: string;
+  handoff?: boolean;
+  trace?: TraceStep[];
+}
 
 /**
  * Extrae el primer teléfono parseable de un texto libre.
@@ -70,6 +90,11 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       return;
     }
 
+    if (conversation.aiPausedUntil && conversation.aiPausedUntil > new Date()) {
+      console.log(`[ai respond] SKIP: IA en pausa hasta ${conversation.aiPausedUntil.toISOString()} (la atiende una persona)`);
+      return;
+    }
+
     const last = conversation.messages[0];
     if (!last || last.direction !== "INBOUND") {
       console.log(`[ai respond] SKIP: último mensaje no es INBOUND (dir=${last?.direction ?? "none"})`);
@@ -106,7 +131,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
 
     // Los clientes creados automáticamente se llaman "Cliente 1234": ese nombre no sirve para saludar
     const clientName = conversation.client?.name;
-    const systemPrompt = buildSystemPrompt({
+    const promptInput: SystemPromptInput = {
       businessName: tenant.name,
       industry: tenant.industry,
       description: tenant.description,
@@ -117,7 +142,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       faq: tenant.faq,
       agentName: tenant.aiAgentName ?? undefined,
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
-    });
+    };
 
     const tools = buildTools(tenantId, {
       conversationId: conversation.id,
@@ -125,16 +150,30 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       waChatId: conversation.waChatId,
     });
 
+    const engine = aiEngine();
     console.log(
-      `[ai respond] llamando a IA (${this.ai.kind}) con ${chatHistory.length} mensajes y ${tools.length} tools…`,
+      `[ai respond] motor=${engine} proveedor=${this.ai.kind} mensajes=${chatHistory.length} tools=${tools.length}`,
     );
-    let result;
+    let result: TurnResult;
     try {
-      result = await this.ai.chat({
-        systemPrompt,
-        messages: chatHistory,
-        tools,
-      });
+      if (engine === "graph") {
+        const graph = await runSalesGraph({
+          businessContext: buildBusinessContext(promptInput),
+          history: chatHistory,
+          tools,
+        });
+        result = { ...graph };
+        for (const step of graph.trace) {
+          console.log(`[ai graph] ${step.node} · ${step.type}${step.tool ? ` ${step.tool}` : ""}${step.detail ? ` — ${step.detail}` : ""}`);
+        }
+      } else {
+        const simple = await this.ai.chat({
+          systemPrompt: buildSystemPrompt(promptInput),
+          messages: chatHistory,
+          tools,
+        });
+        result = { ...simple, provider: this.ai.kind };
+      }
     } catch (err) {
       // 2.5 — la IA falló. NO dejamos al cliente en silencio: enviamos un
       // mensaje de respaldo y dejamos rastro para el operador.
@@ -174,9 +213,15 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       },
     });
 
+    // Pasó a una persona: queda por revisar y la IA no responde por un tiempo
     await prisma.conversation.update({
       where: { id: conversation.id },
-      data: { lastMessageAt: sent.sentAt },
+      data: {
+        lastMessageAt: sent.sentAt,
+        ...(result.handoff
+          ? { status: "PENDING_REVIEW", aiPausedUntil: new Date(Date.now() + HANDOFF_PAUSE_MS) }
+          : {}),
+      },
     });
   }
 
@@ -251,7 +296,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
   private async logUsage(
     tenantId: string,
     conversationId: string,
-    result: ChatTurnOutput,
+    result: TurnResult,
   ): Promise<void> {
     try {
       const costMicroUsd = estimateCostMicroUsd(result.model, result.tokensIn, result.tokensOut);
@@ -259,12 +304,14 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         data: {
           tenantId,
           conversationId,
-          provider: this.ai.kind,
+          provider: result.provider,
           model: result.model,
           tokensIn: result.tokensIn,
           tokensOut: result.tokensOut,
           toolCalls: result.toolCallsUsed,
           costMicroUsd,
+          intent: result.intent ?? null,
+          trace: result.trace ? JSON.parse(JSON.stringify(result.trace)) : undefined,
         },
       });
       console.log(

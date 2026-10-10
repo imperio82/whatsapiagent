@@ -338,6 +338,7 @@ model Conversation {
   lastMessageAt DateTime?
   unreadCount   Int                @default(0)
   assignedTo    String? // userId del agente asignado
+  aiPausedUntil DateTime? // la IA no responde hasta esta fecha (se pasó a una persona)
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
@@ -387,6 +388,8 @@ model AiUsageLog {
   tokensOut      Int
   toolCalls      Int      @default(0)
   costMicroUsd   Int      @default(0) // costo estimado en millonésimas de USD
+  intent         String? // a qué agente lo envió el router (ventas, pedido, info, humano)
+  trace          Json? // pasos del grafo: nodos, herramientas, argumentos y verificación
   createdAt      DateTime @default(now())
 
   @@index([tenantId, createdAt])
