@@ -50,10 +50,12 @@ export function rankProducts<T extends SearchableProduct>(query: string, product
   const scored = products.map((p) => {
     const nameWords = normalize(`${p.name} ${p.sku ?? ""}`).split(" ").map(stem);
     const descWords = normalize(p.description ?? "").split(" ").map(stem);
+    // Las palabras cortas (tallas como "m" o "xl") solo cuentan si coinciden exactas
+    const matches = (w: string, t: string) => w === t || (t.length > 2 && w.startsWith(t));
     let score = 0;
     for (const t of tokens) {
-      if (nameWords.some((w) => w === t || w.startsWith(t))) score += 2;
-      else if (descWords.some((w) => w === t || w.startsWith(t))) score += 1;
+      if (nameWords.some((w) => matches(w, t))) score += 2;
+      else if (descWords.some((w) => matches(w, t))) score += 1;
     }
     return { p, score };
   });

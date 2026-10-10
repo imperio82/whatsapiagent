@@ -101,7 +101,8 @@ const SPECIALISTS: Record<Exclude<Intent, "humano">, { tools: string[]; rules: s
 2. Llama search_products para obtener los IDs y precios actuales (el historial no trae los IDs).
 3. Si el cliente ya confirmó de forma explícita productos y cantidades, crea el pedido con create_pending_order. Si falta un dato (cuál producto exacto, cuántas unidades), pregunta solo eso.
 4. Con el pedido creado, dile el código y el total EXACTOS que devolvió la herramienta y cómo puede pagar según los medios de pago del negocio.
-5. Si la herramienta devuelve un error (stock_insuficiente, producto_inexistente), NO digas que se creó: explica qué pasó y ofrece una alternativa.`,
+5. Si la herramienta devuelve un error (stock_insuficiente, producto_inexistente), NO digas que se creó: explica qué pasó y ofrece una alternativa.
+6. Si en esta conversación ya se creó un pedido (aparece un código PED-), NO vuelvas a incluir sus productos: lo que el cliente agregue va en un pedido adicional solo con los productos nuevos, y díselo así ("te dejé un pedido adicional").`,
   },
   info: {
     tools: ["get_business_info"],

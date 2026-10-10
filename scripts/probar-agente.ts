@@ -10,11 +10,12 @@ import { runSalesGraph } from "../src/modules/ai/infrastructure/graph/sales-grap
 import { buildBusinessContext } from "../src/modules/ai/infrastructure/system-prompt";
 
 const catalog = [
-  { id: "p1", name: "Arroz Diana 500 g", sku: "ARR-500", description: null, price: 2400, stock: 40 },
-  { id: "p2", name: "Arroz Roa 1 kg", sku: "ARR-1K", description: "Arroz blanco", price: 4600, stock: 25 },
-  { id: "p3", name: "Jabón Rey en barra", sku: "JAB-REY", description: "Jabón azul para ropa", price: 2100, stock: 3 },
-  { id: "p4", name: "Panela redonda x 2", sku: null, description: null, price: 3800, stock: 18 },
-  { id: "p5", name: "Aceite Premier 1 L", sku: "ACE-1L", description: null, price: 11900, stock: 9 },
+  { id: "p1", name: "Jean clásico hombre azul talla 32", sku: "VES-JEA-HOM-32", description: "Corte recto, azul oscuro", price: 89900, stock: 8 },
+  { id: "p2", name: "Jean clásico hombre azul talla 34", sku: "VES-JEA-HOM-34", description: "Corte recto, azul oscuro", price: 89900, stock: 6 },
+  { id: "p3", name: "Camiseta básica negra talla M", sku: "VES-CAM-NEG-M", description: "100 % algodón, unisex", price: 25000, stock: 10 },
+  { id: "p4", name: "Camiseta básica negra talla XL", sku: "VES-CAM-NEG-XL", description: "100 % algodón, unisex", price: 25000, stock: 1 },
+  { id: "p5", name: "Tenis blancos unisex talla 40", sku: "CAL-TEN-BLA-40", description: "Horma normal", price: 129900, stock: 5 },
+  { id: "p6", name: "Gorra negra", sku: "ACC-GOR-NEG", description: "Talla única", price: 29900, stock: 9 },
 ];
 let orderSeq = 0;
 
@@ -38,7 +39,7 @@ const tools: AITool[] = [
     description: "Información del negocio: horario, envíos, medios de pago y preguntas frecuentes.",
     parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
     async execute() {
-      return JSON.stringify({ name: "Distribuidora La Esperanza", note: "ver INFORMACIÓN DEL NEGOCIO" });
+      return JSON.stringify({ name: "Mis Cositas", note: "ver INFORMACIÓN DEL NEGOCIO" });
     },
   },
   {
@@ -80,25 +81,26 @@ const tools: AITool[] = [
 ];
 
 const businessContext = buildBusinessContext({
-  businessName: "Distribuidora La Esperanza",
-  industry: "víveres y aseo",
-  description: "Distribuidora de víveres y aseo en Quinchía, Risaralda. Vendemos a tiendas y al detal.",
-  address: "Calle 5 # 4-20, Quinchía",
-  businessHours: "Lunes a sábado de 7:00 a. m. a 6:00 p. m. Domingos y festivos cerrado.",
-  deliveryInfo: "Domicilio gratis en el casco urbano en compras desde $50.000. A veredas cuesta $5.000. Entregamos el mismo día si pides antes de las 2 p. m.",
-  paymentInfo: "Efectivo contra entrega, Nequi y Daviplata.",
-  faq: "Cambios: dentro de los 3 días con la factura.",
-  agentName: "Sofía, asesora de La Esperanza",
-  clientName: "Don Mario",
+  businessName: "Mis Cositas",
+  industry: "Ropa y calzado",
+  description: "Tienda de ropa y calzado para hombre y mujer en Quinchía, Risaralda, con envíos a todo Colombia.",
+  address: "Carrera 6 # 5-14, local 2, Quinchía",
+  businessHours: "Lunes a sábado de 8:00 a. m. a 7:00 p. m. Domingos de 9:00 a. m. a 1:00 p. m.",
+  deliveryInfo: "En Quinchía el domicilio vale $3.000. Envíos a todo Colombia por Interrapidísimo entre $12.000 y $18.000, en 2 a 4 días hábiles. Envío gratis desde $200.000.",
+  paymentInfo: "Nequi, Daviplata, transferencia a Bancolombia y efectivo en el local.",
+  faq: "Cambios de talla dentro de los 8 días con la etiqueta y sin usar.",
+  agentName: "Sofía, asesora de la tienda",
+  clientName: "Laura",
 });
 
 const turns = process.argv.slice(2).length
   ? process.argv.slice(2)
   : [
-      "Buenas, ¿tienen arroz de 500g?",
-      "¿y el domicilio a la vereda cuánto vale?",
-      "Listo, mándame 10 arroces Diana y 2 jabones rey",
-      "Necesito hablar con el dueño, el último pedido llegó incompleto",
+      "Hola, ¿tienen jean de hombre talla 32?",
+      "¿y cuánto vale el envío a Pereira?",
+      "Listo, mándame el jean y 2 camisetas negras talla M",
+      "También agrégame 3 camisetas negras XL",
+      "Quiero hablar con una persona, el pedido anterior llegó con la talla equivocada",
     ];
 
 async function main() {
