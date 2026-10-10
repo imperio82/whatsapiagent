@@ -86,7 +86,7 @@ type GraphState = typeof State.State;
 
 const SPECIALISTS: Record<Exclude<Intent, "humano">, { tools: string[]; rules: string }> = {
   ventas: {
-    tools: ["search_products", "get_business_info"],
+    tools: ["search_products", "get_business_info", "save_client_info"],
     rules: `ERES EL AGENTE DE VENTAS. Ayudas al cliente a encontrar productos y le cotizas.
 - Usa search_products antes de mencionar o cotizar cualquier producto. Busca por el tipo de producto en 1 o 2 palabras ("arroz", "jabón rey"); la marca, el tamaño o la presentación revísalos en los resultados.
 - Si no hay resultados, intenta una vez más con otra palabra (sinónimo o singular). Si tampoco, di con honestidad que no lo manejas.
@@ -95,7 +95,7 @@ const SPECIALISTS: Record<Exclude<Intent, "humano">, { tools: string[]; rules: s
 - Si solo está consultando, responde sin insistir en la venta.`,
   },
   pedido: {
-    tools: ["search_products", "create_pending_order"],
+    tools: ["search_products", "create_pending_order", "save_client_info"],
     rules: `ERES EL AGENTE DE PEDIDOS. El cliente quiere comprar.
 1. Identifica en la conversación qué productos y cuántas unidades pidió.
 2. Llama search_products para obtener los IDs y precios actuales (el historial no trae los IDs).
@@ -105,7 +105,7 @@ const SPECIALISTS: Record<Exclude<Intent, "humano">, { tools: string[]; rules: s
 6. Si en esta conversación ya se creó un pedido (aparece un código PED-), NO vuelvas a incluir sus productos: lo que el cliente agregue va en un pedido adicional solo con los productos nuevos, y díselo así ("te dejé un pedido adicional").`,
   },
   info: {
-    tools: ["get_business_info"],
+    tools: ["get_business_info", "save_client_info"],
     rules: `ERES EL AGENTE DE INFORMACIÓN. Respondes sobre horario, envíos, medios de pago, dirección y políticas.
 - Usa solo la INFORMACIÓN DEL NEGOCIO (o get_business_info). Si el dato no está, dilo y ofrece pasar con una persona.
 - Si además pregunta por productos o precios, dile que con gusto le ayudas a buscarlos; no des precios de productos tú.`,
@@ -115,7 +115,7 @@ const SPECIALISTS: Record<Exclude<Intent, "humano">, { tools: string[]; rules: s
 const ROUTER_PROMPT = `Clasifica el ÚLTIMO mensaje del cliente de una tienda que atiende por WhatsApp, teniendo en cuenta la conversación:
 - "ventas": saludos, preguntas por productos, precios, disponibilidad o recomendaciones.
 - "pedido": el cliente confirma que quiere comprar o pide cantidades concretas para que se las manden ("sí, mándame 2", "lo llevo", "quiero 10 de arroz").
-- "info": horario, envíos o domicilios, medios de pago, dirección, cambios, garantías u otras políticas.
+- "info": horario, envíos o domicilios, medios de pago, dirección, cambios, garantías, el estado de un pedido anterior u otras políticas.
 - "humano": pide hablar con una persona, está molesto o se queja, o el tema no tiene que ver con el negocio.
 Si dudas entre ventas y otra, elige "ventas".`;
 
@@ -203,9 +203,16 @@ export async function runSalesGraph(input: {
         for (const call of ai.tool_calls) {
           const t = lcTools.get(call.name);
           const started = Date.now();
-          const output = t && spec.tools.includes(call.name)
-            ? String(await t.invoke(call.args))
-            : JSON.stringify({ error: `herramienta no disponible para ${name}: ${call.name}` });
+          // Un pedido ya creado en este turno (por ejemplo, antes de un reintento) no se vuelve a crear
+          const previousOrder =
+            call.name === "create_pending_order"
+              ? [...state.toolOutputs, ...outputs].find((o) => o.includes('"orderCode"') && o.includes('"ok":true'))
+              : undefined;
+          const output = previousOrder
+            ? JSON.stringify({ ...JSON.parse(previousOrder), nota: "Este pedido ya se creó en este turno; no se creó otro." })
+            : t && spec.tools.includes(call.name)
+              ? String(await t.invoke(call.args))
+              : JSON.stringify({ error: `herramienta no disponible para ${name}: ${call.name}` });
           usage.toolCalls += 1;
           outputs.push(output);
           messages.push(new ToolMessage({ content: output, tool_call_id: call.id ?? call.name }));

@@ -15,6 +15,8 @@ export interface SystemPromptInput {
   agentName?: string;
   /** Nombre del cliente si lo conocemos (no los genéricos "Cliente 1234"). */
   clientName?: string | null;
+  /** Lo que ya se sabe del cliente: ficha, memoria y pedidos anteriores (ver client-memory.ts). */
+  clientProfile?: string | null;
   now?: Date;
 }
 
@@ -41,7 +43,9 @@ export function buildBusinessContext(input: SystemPromptInput): string {
     input.clientName ? `\nEstás hablando con ${input.clientName}.` : ""
   }
 
-INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté aquí):${section("Descripción", input.description)}${section("Dirección", input.address)}${section("Horario de atención", input.businessHours)}${section("Envíos y entregas", input.deliveryInfo)}${section("Medios de pago", input.paymentInfo)}${section("Preguntas frecuentes y políticas", input.faq)}`;
+INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté aquí):${section("Descripción", input.description)}${section("Dirección", input.address)}${section("Horario de atención", input.businessHours)}${section("Envíos y entregas", input.deliveryInfo)}${section("Medios de pago", input.paymentInfo)}${section("Preguntas frecuentes y políticas", input.faq)}${
+    input.clientProfile ? `\n${input.clientProfile}\n` : ""
+  }`;
 }
 
 /** Reglas que aplican a cualquier agente que le escriba al cliente. */
@@ -51,6 +55,8 @@ export const COMMON_RULES = `REGLAS GENERALES:
 - Da los precios EXACTOS que devuelven las herramientas, en pesos colombianos con punto de miles (ej: $4.500). No redondees ni apliques descuentos que no estén en el catálogo.
 - No prometas plazos de entrega ni descuentos que no estén en la INFORMACIÓN DEL NEGOCIO.
 - Si no puedes resolver algo, dile al cliente que lo pasas con alguien del equipo. No inventes respuestas.
+- Si el cliente te da su nombre, ciudad, dirección, correo o una preferencia (talla, color), guárdalo con save_client_info. No vuelvas a preguntar lo que ya está en DATOS DEL CLIENTE; si hace falta, solo confírmalo ("¿te lo enviamos a la misma dirección?").
+- Si pregunta por un pedido anterior, responde con los pedidos de DATOS DEL CLIENTE.
 
 FORMATO: máximo 3 o 4 oraciones. Puedes usar saltos de línea y emojis con moderación (📦 ✅ 💳). No uses markdown: en WhatsApp la negrita va con un solo asterisco (*PED-0001*), nunca con dos.`;
 

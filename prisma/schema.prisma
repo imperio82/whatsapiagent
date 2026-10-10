@@ -197,7 +197,10 @@ model Client {
   phone     String // E.164
   email     String?
   address   String?
+  city      String?
   notes     String?
+  // Memoria del agente de IA: preferencias y datos que el cliente contó (tallas, colores, otra dirección…)
+  aiMemory  String?
   source    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

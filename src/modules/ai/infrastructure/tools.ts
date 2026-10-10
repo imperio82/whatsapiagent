@@ -2,6 +2,7 @@ import { prisma } from "@shared/infrastructure/prisma/client";
 import { isLidJid, jidLocalPart } from "@shared/domain/wa-jid";
 import type { AITool } from "../domain/ports/ai-provider";
 import { rankProducts } from "../domain/product-search";
+import { appendMemory, isGenericClientName } from "../domain/client-memory";
 
 /** Catálogo máximo que se revisa en memoria por búsqueda (pymes: cientos de productos). */
 const MAX_CATALOG_SCAN = 1000;
@@ -71,6 +72,62 @@ async function ensureClientId(tenantId: string, ctx: ToolContext): Promise<strin
 
 export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
   return [
+    {
+      name: "save_client_info",
+      description:
+        "Guarda en la ficha del cliente lo que te cuente: nombre, ciudad, dirección de entrega, correo y preferencias (talla, color, para quién compra). Úsala apenas te dé uno de esos datos, para no volver a preguntarlo en otra conversación.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Nombre real del cliente" },
+          city: { type: "string", description: "Ciudad o municipio" },
+          address: { type: "string", description: "Dirección de entrega" },
+          email: { type: "string", description: "Correo electrónico" },
+          preference: { type: "string", description: "Preferencia o dato útil para próximas compras (ej: 'usa talla M en camisetas')" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const clientId = await ensureClientId(tenantId, ctx);
+        if (!clientId) return JSON.stringify({ error: "no hay un cliente asociado a la conversación" });
+        const client = await prisma.client.findFirst({ where: { id: clientId, tenantId } });
+        if (!client) return JSON.stringify({ error: "cliente no encontrado" });
+
+        const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+        const data: { name?: string; city?: string; address?: string; email?: string; aiMemory?: string } = {};
+        const saved: string[] = [];
+        let memory = client.aiMemory;
+
+        // Como en un CRM: se llenan los campos vacíos; lo que ya escribió una persona no se sobrescribe,
+        // pero si el cliente da un dato distinto queda anotado en la memoria.
+        const fill = (field: "name" | "city" | "address" | "email", value: string | null, isEmpty: boolean, label: string) => {
+          if (!value) return;
+          if (isEmpty) {
+            data[field] = value;
+            saved.push(field);
+          } else if ((client[field] ?? "").toLowerCase() !== value.toLowerCase()) {
+            memory = appendMemory(memory, `${label} distinta a la de la ficha: ${value}`);
+            saved.push(`${field} (anotada en memoria)`);
+          }
+        };
+        fill("name", text(args.name), isGenericClientName(client.name), "Dio un nombre");
+        fill("city", text(args.city), !client.city, "Mencionó una ciudad");
+        fill("address", text(args.address), !client.address, "Mencionó una dirección");
+        fill("email", text(args.email), !client.email, "Mencionó un correo");
+
+        const preference = text(args.preference);
+        if (preference) {
+          memory = appendMemory(memory, preference);
+          saved.push("preferencia");
+        }
+        if (memory !== client.aiMemory) data.aiMemory = memory ?? undefined;
+
+        if (Object.keys(data).length > 0) await prisma.client.update({ where: { id: client.id }, data });
+        return JSON.stringify({ ok: true, guardado: saved });
+      },
+    },
+
     {
       name: "search_products",
       description:

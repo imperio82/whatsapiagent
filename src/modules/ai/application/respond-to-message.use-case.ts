@@ -6,6 +6,7 @@ import { buildBusinessContext, buildSystemPrompt, type SystemPromptInput } from 
 import { runSalesGraph, type TraceStep } from "../infrastructure/graph/sales-graph";
 import { buildTools } from "../infrastructure/tools";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
+import { formatClientProfile, resumeNote } from "../domain/client-memory";
 
 const FALLBACK_MESSAGE =
   "Disculpa, tuve un problema procesando tu mensaje 🙏 Alguien del equipo te va a responder en un momento.";
@@ -16,6 +17,8 @@ export interface RespondInput {
 }
 
 const MAX_CONTEXT_MESSAGES = 20;
+/** Pedidos anteriores del cliente que ve el agente. */
+const RECENT_ORDERS = 3;
 
 /** Tiempo que la IA deja de responder una conversación después de pasarla a una persona. */
 const HANDOFF_PAUSE_MS = 2 * 60 * 60 * 1000;
@@ -124,10 +127,40 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       console.log(`[ai respond] flow LID NO manejó (ya se pidió). Cayendo a IA normal.`);
     }
 
-    const chatHistory: ChatMessage[] = orderedMessages.map((m) => ({
-      role: m.direction === "INBOUND" ? "user" : "assistant",
-      content: m.content,
-    }));
+    // Si el cliente retoma después de horas o días, se le avisa al agente en el mismo mensaje
+    const chatHistory: ChatMessage[] = orderedMessages.map((m, i) => {
+      const note = m.direction === "INBOUND" ? resumeNote(orderedMessages[i - 1]?.sentAt ?? null, m.sentAt) : null;
+      return {
+        role: m.direction === "INBOUND" ? "user" : "assistant",
+        content: note ? `${note} ${m.content}` : m.content,
+      };
+    });
+
+    // Memoria entre conversaciones: ficha del cliente, lo que ha contado y sus últimos pedidos
+    const recentOrders = conversation.clientId
+      ? await prisma.order.findMany({
+          where: { tenantId, clientId: conversation.clientId },
+          orderBy: { createdAt: "desc" },
+          take: RECENT_ORDERS,
+          include: { items: { select: { quantity: true, productNameSnap: true } } },
+        })
+      : [];
+    const clientProfile = conversation.client
+      ? formatClientProfile({
+          name: conversation.client.name,
+          address: conversation.client.address,
+          city: conversation.client.city,
+          email: conversation.client.email,
+          aiMemory: conversation.client.aiMemory,
+          orders: recentOrders.map((o) => ({
+            code: o.code,
+            createdAt: o.createdAt,
+            status: o.status,
+            totalMajor: o.totalCents / 100,
+            items: o.items.map((i) => ({ quantity: i.quantity, name: i.productNameSnap })),
+          })),
+        })
+      : null;
 
     // Los clientes creados automáticamente se llaman "Cliente 1234": ese nombre no sirve para saludar
     const clientName = conversation.client?.name;
@@ -142,6 +175,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       faq: tenant.faq,
       agentName: tenant.aiAgentName ?? undefined,
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
+      clientProfile,
     };
 
     const tools = buildTools(tenantId, {

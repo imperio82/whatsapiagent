@@ -80,9 +80,15 @@ export function verifyReply(reply: string, evidence: VerificationEvidence): Veri
     }
   }
 
-  const knownCodes = new Set(evidence.toolOutputs.flatMap(extractOrderCodes));
+  // Códigos válidos: los que devolvió una herramienta o los de pedidos anteriores del cliente (en el contexto)
+  const knownCodes = new Set([
+    ...evidence.toolOutputs.flatMap(extractOrderCodes),
+    ...extractOrderCodes(evidence.businessContext),
+  ]);
   for (const code of extractOrderCodes(reply)) {
-    if (!knownCodes.has(code)) problems.push(`El código ${code} no lo devolvió create_pending_order.`);
+    if (!knownCodes.has(code)) {
+      problems.push(`El código ${code} no lo devolvió create_pending_order ni es un pedido anterior del cliente.`);
+    }
   }
 
   return { ok: problems.length === 0, problems };
