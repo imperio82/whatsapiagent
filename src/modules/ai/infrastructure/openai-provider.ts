@@ -121,7 +121,7 @@ export class OpenAIProvider implements AIProvider {
 
     // Se acabaron los pasos sin respuesta final
     return {
-      text: "Disculpá, no pude procesar tu consulta. Un agente humano te va a responder en un momento.",
+      text: "Disculpa, no pude procesar tu consulta. Alguien del equipo te va a responder en un momento.",
       toolCallsUsed,
       tokensIn,
       tokensOut,

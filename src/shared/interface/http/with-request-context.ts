@@ -2,7 +2,7 @@ import { auth } from "@modules/auth/infrastructure/auth-config";
 import { UnauthorizedError } from "@shared/domain/errors";
 import { TenantContext, type RequestContext } from "@shared/application/tenant-context";
 import { prisma } from "@shared/infrastructure/prisma/client";
-import { failure } from "./response";
+import { failure, type ApiFailure } from "./response";
 import type { NextResponse } from "next/server";
 
 /**
@@ -12,9 +12,9 @@ import type { NextResponse } from "next/server";
  * - Carga permisos efectivos del miembro
  * - Hace todo disponible vía TenantContext.require()
  */
-export function withRequestContext<T>(
-  handler: (req: Request) => Promise<NextResponse<T>>,
-): (req: Request) => Promise<NextResponse<T> | NextResponse> {
+export function withRequestContext<R extends NextResponse<unknown>>(
+  handler: (req: Request) => Promise<R>,
+): (req: Request) => Promise<R | NextResponse<ApiFailure>> {
   return async (req: Request) => {
     try {
       const session = await auth();

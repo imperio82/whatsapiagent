@@ -5,7 +5,7 @@ const ISO_CURRENCY = /^[A-Z]{3}$/;
 export class Money {
   private constructor(public readonly cents: number, public readonly currency: string) {}
 
-  static fromCents(cents: number, currency = "GTQ"): Money {
+  static fromCents(cents: number, currency = "COP"): Money {
     if (!Number.isInteger(cents) || cents < 0) {
       throw new ValidationError("El precio debe ser un entero positivo en centavos");
     }
@@ -15,7 +15,7 @@ export class Money {
     return new Money(cents, currency);
   }
 
-  static fromMajor(amount: number, currency = "GTQ"): Money {
+  static fromMajor(amount: number, currency = "COP"): Money {
     return Money.fromCents(Math.round(amount * 100), currency);
   }
 

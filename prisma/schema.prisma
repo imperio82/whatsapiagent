@@ -17,27 +17,34 @@ datasource db {
 // ============================================================================
 
 model Tenant {
-  id          String       @id @default(cuid())
-  slug        String       @unique
-  name        String
-  industry    String?
-  address     String?
-  taxId       String?
-  description String?
-  status      TenantStatus @default(ACTIVE)
-  aiAutoReply Boolean      @default(false)
-  aiAgentName String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id            String       @id @default(cuid())
+  slug          String       @unique
+  name          String
+  industry      String?
+  address       String?
+  taxId         String?
+  description   String?
+  status        TenantStatus @default(ACTIVE)
+  aiAutoReply   Boolean      @default(false)
+  aiAgentName   String?
+  // Contexto que usa el agente de IA para responder (texto libre que escribe el negocio)
+  businessHours String? // horario de atención
+  deliveryInfo  String? // envíos, cobertura, costos y tiempos
+  paymentInfo   String? // medios de pago
+  faq           String? // preguntas frecuentes, políticas de cambios y garantías
+  // Consecutivo de pedidos (se incrementa dentro de la transacción)
+  orderSeq      Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  memberships Membership[]
-  roles       Role[]
-  products    Product[]
-  templates   MessageTemplate[]
-  clients     Client[]
-  leads       Lead[]
-  orders      Order[]
-  conversations Conversation[]
+  memberships     Membership[]
+  roles           Role[]
+  products        Product[]
+  templates       MessageTemplate[]
+  clients         Client[]
+  leads           Lead[]
+  orders          Order[]
+  conversations   Conversation[]
   whatsappAccount WhatsappAccount?
 
   @@map("tenants")
@@ -51,14 +58,14 @@ enum TenantStatus {
 
 // Usuario global de la plataforma — puede pertenecer a varios tenants
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  avatarUrl    String?
-  isPlatformAdmin Boolean @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String
+  passwordHash    String
+  avatarUrl       String?
+  isPlatformAdmin Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   memberships Membership[]
 
@@ -74,8 +81,8 @@ model Membership {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roles  MembershipRole[]
 
   @@unique([userId, tenantId])
@@ -94,18 +101,18 @@ enum MembershipStatus {
 // ============================================================================
 
 model Role {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   tenantId    String? // null = rol del sistema, no editable
-  key         String  // ej: "owner", "admin", "agent", "viewer"
+  key         String // ej: "owner", "admin", "agent", "viewer"
   name        String
   description String?
-  isSystem    Boolean @default(false)
+  isSystem    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant         Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  permissions    RolePermission[]
-  memberships    MembershipRole[]
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  memberships MembershipRole[]
 
   @@unique([tenantId, key])
   @@index([tenantId])
@@ -113,10 +120,10 @@ model Role {
 }
 
 model Permission {
-  id        String @id @default(cuid())
-  key       String @unique // ej: "products.create", "orders.update"
-  resource  String         // "products", "orders", ...
-  action    String         // "create", "read", "update", "delete", "manage"
+  id        String   @id @default(cuid())
+  key       String   @unique // ej: "products.create", "orders.update"
+  resource  String // "products", "orders", ...
+  action    String // "create", "read", "update", "delete", "manage"
   createdAt DateTime @default(now())
 
   roles RolePermission[]
@@ -151,21 +158,21 @@ model MembershipRole {
 // ============================================================================
 
 model Product {
-  id           String  @id @default(cuid())
-  tenantId     String
-  sku          String?
-  name         String
-  description  String?
-  priceCents   Int     // siempre en centavos, evita float
-  currency     String  @default("GTQ")
-  trackInventory Boolean @default(true)
-  stock        Int     @default(0)
-  imageUrl     String?
-  status       ProductStatus @default(ACTIVE)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String        @id @default(cuid())
+  tenantId       String
+  sku            String?
+  name           String
+  description    String?
+  priceCents     Int // siempre en centavos, evita float
+  currency       String        @default("COP")
+  trackInventory Boolean       @default(true)
+  stock          Int           @default(0)
+  imageUrl       String?
+  status         ProductStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
 
   @@unique([tenantId, sku])
@@ -184,16 +191,16 @@ enum ProductStatus {
 // ============================================================================
 
 model Client {
-  id           String   @id @default(cuid())
-  tenantId     String
-  name         String
-  phone        String   // E.164
-  email        String?
-  address      String?
-  notes        String?
-  source       String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  phone     String // E.164
+  email     String?
+  address   String?
+  notes     String?
+  source    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   leads         Lead[]
@@ -206,24 +213,24 @@ model Client {
 }
 
 model Lead {
-  id            String      @id @default(cuid())
-  tenantId      String
-  clientId      String?
-  contactName   String
-  businessName  String?
-  phone         String
-  address       String?
-  industry      String?
+  id              String     @id @default(cuid())
+  tenantId        String
+  clientId        String?
+  contactName     String
+  businessName    String?
+  phone           String
+  address         String?
+  industry        String?
   productInterest String?
   reasonNotBought String?
-  stage         LeadStage   @default(NEW)
-  source        LeadSource  @default(WHATSAPP)
-  lastContactAt DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  stage           LeadStage  @default(NEW)
+  source          LeadSource @default(WHATSAPP)
+  lastContactAt   DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client  Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client  Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
   openers LeadOpener[]
 
   @@index([tenantId, stage])
@@ -231,12 +238,12 @@ model Lead {
 }
 
 enum LeadStage {
-  NEW            // recién captado
-  CONTACTED      // primer contacto enviado
-  INTERESTED     // mostró interés
-  READY_TO_BUY   // listo para comprar
-  CUSTOMER       // ya es cliente
-  LOST           // perdido
+  NEW // recién captado
+  CONTACTED // primer contacto enviado
+  INTERESTED // mostró interés
+  READY_TO_BUY // listo para comprar
+  CUSTOMER // ya es cliente
+  LOST // perdido
 }
 
 enum LeadSource {
@@ -250,14 +257,14 @@ enum LeadSource {
 // Mensaje "abridor" generado por IA para captar leads — guardamos
 // el contenido y métricas para ver cuál convierte más.
 model LeadOpener {
-  id           String   @id @default(cuid())
-  leadId       String
-  content      String
-  generatedBy  String   @default("ai")
-  sentAt       DateTime?
-  responded    Boolean  @default(false)
-  convertedAt  DateTime?
-  createdAt    DateTime @default(now())
+  id          String    @id @default(cuid())
+  leadId      String
+  content     String
+  generatedBy String    @default("ai")
+  sentAt      DateTime?
+  responded   Boolean   @default(false)
+  convertedAt DateTime?
+  createdAt   DateTime  @default(now())
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
@@ -270,20 +277,20 @@ model LeadOpener {
 // ============================================================================
 
 model Order {
-  id              String      @id @default(cuid())
-  tenantId        String
-  clientId        String
-  code            String      // ej: ORD-000123
-  status          OrderStatus @default(PENDING_PAYMENT)
-  totalCents      Int
-  currency        String      @default("GTQ")
-  paymentProofUrl String?
-  paidAt          DateTime?
+  id                  String      @id @default(cuid())
+  tenantId            String
+  clientId            String
+  code                String // ej: ORD-000123
+  status              OrderStatus @default(PENDING_PAYMENT)
+  totalCents          Int
+  currency            String      @default("COP")
+  paymentProofUrl     String?
+  paidAt              DateTime?
   scheduledDeliveryAt DateTime?
-  dispatchedAt    DateTime?
-  notes           String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  dispatchedAt        DateTime?
+  notes               String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   client Client      @relation(fields: [clientId], references: [id], onDelete: Restrict)
@@ -304,10 +311,10 @@ enum OrderStatus {
 }
 
 model OrderItem {
-  id              String @id @default(cuid())
+  id              String  @id @default(cuid())
   orderId         String
   productId       String?
-  productNameSnap String  // snapshot del nombre por si el producto cambia
+  productNameSnap String // snapshot del nombre por si el producto cambia
   unitPriceCents  Int
   quantity        Int
 
@@ -323,19 +330,19 @@ model OrderItem {
 // ============================================================================
 
 model Conversation {
-  id           String             @id @default(cuid())
-  tenantId     String
-  clientId     String?
-  waChatId     String             // wa_id (teléfono cliente)
-  status       ConversationStatus @default(OPEN)
+  id            String             @id @default(cuid())
+  tenantId      String
+  clientId      String?
+  waChatId      String // wa_id (teléfono cliente)
+  status        ConversationStatus @default(OPEN)
   lastMessageAt DateTime?
-  unreadCount  Int                @default(0)
-  assignedTo   String?            // userId del agente asignado
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  unreadCount   Int                @default(0)
+  assignedTo    String? // userId del agente asignado
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client   Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
   messages Message[]
 
   @@unique([tenantId, waChatId])
@@ -351,16 +358,16 @@ enum ConversationStatus {
 }
 
 model Message {
-  id             String         @id @default(cuid())
+  id             String           @id @default(cuid())
   conversationId String
-  waMessageId    String?        @unique
+  waMessageId    String?          @unique
   direction      MessageDirection
-  type           MessageType    @default(TEXT)
+  type           MessageType      @default(TEXT)
   content        String
   mediaUrl       String?
-  authoredBy     MessageAuthor  @default(CLIENT)
+  authoredBy     MessageAuthor    @default(CLIENT)
   agentUserId    String?
-  sentAt         DateTime       @default(now())
+  sentAt         DateTime         @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -374,8 +381,8 @@ model AiUsageLog {
   id             String   @id @default(cuid())
   tenantId       String
   conversationId String
-  provider       String   // "openai" | "gemini"
-  model          String   // modelo concreto (ej: gpt-4o-mini)
+  provider       String // "openai" | "gemini"
+  model          String // modelo concreto (ej: gpt-4o-mini)
   tokensIn       Int
   tokensOut      Int
   toolCalls      Int      @default(0)
@@ -413,16 +420,16 @@ enum MessageAuthor {
 // ============================================================================
 
 model MessageTemplate {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   tenantId  String
-  key       String   // ej: "welcome", "order_confirmation"
+  key       String // ej: "welcome", "order_confirmation"
   name      String
   body      String
   category  TemplateCategory @default(CUSTOM)
   variables String[] // ej: ["{{cliente}}", "{{total}}"]
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -444,11 +451,11 @@ enum TemplateCategory {
 // ============================================================================
 
 model WhatsappAccount {
-  id              String   @id @default(cuid())
-  tenantId        String   @unique
+  id                 String @id @default(cuid())
+  tenantId           String @unique
   // Proveedor de mensajería de esta cuenta: "meta" | "twilio".
   // (Baileys no persiste cuenta: usa sesión en disco.)
-  provider        String   @default("meta")
+  provider           String @default("meta")
   // Número de WhatsApp del negocio en formato E.164 sin '+' (solo dígitos).
   // Lo comparten Meta y Twilio; en Twilio se usa como remitente y para
   // resolver el tenant en el webhook entrante.
@@ -461,12 +468,12 @@ model WhatsappAccount {
   webhookVerifyToken String?
 
   // --- Twilio (solo si provider="twilio") ---
-  twilioAccountSid    String?
-  twilioAuthTokenEnc  String? // cifrado en reposo (TODO)
+  twilioAccountSid   String?
+  twilioAuthTokenEnc String? // cifrado en reposo (TODO)
 
-  verified        Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

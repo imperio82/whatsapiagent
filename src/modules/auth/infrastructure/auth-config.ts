@@ -28,7 +28,8 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
+// En next-auth v5 el tipo JWT vive en @auth/core
+declare module "@auth/core/jwt" {
   interface JWT {
     userId: string;
     isPlatformAdmin: boolean;

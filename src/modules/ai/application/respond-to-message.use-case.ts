@@ -7,7 +7,7 @@ import { buildTools } from "../infrastructure/tools";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
 
 const FALLBACK_MESSAGE =
-  "Disculpá, tuve un problema procesando tu mensaje 🙏 Un agente humano te va a responder en un momento.";
+  "Disculpa, tuve un problema procesando tu mensaje 🙏 Alguien del equipo te va a responder en un momento.";
 
 export interface RespondInput {
   tenantId: string;
@@ -104,11 +104,19 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       content: m.content,
     }));
 
+    // Los clientes creados automáticamente se llaman "Cliente 1234": ese nombre no sirve para saludar
+    const clientName = conversation.client?.name;
     const systemPrompt = buildSystemPrompt({
       businessName: tenant.name,
       industry: tenant.industry,
       description: tenant.description,
+      address: tenant.address,
+      businessHours: tenant.businessHours,
+      deliveryInfo: tenant.deliveryInfo,
+      paymentInfo: tenant.paymentInfo,
+      faq: tenant.faq,
       agentName: tenant.aiAgentName ?? undefined,
+      clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
     });
 
     const tools = buildTools(tenantId, {
@@ -197,7 +205,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       await this.sendAiMessage(
         tenantId,
         conversation,
-        `¡Perfecto! Anoté tu número (+${phone}). Para que pueda escribirte detalles, agregame como contacto en tu WhatsApp y avisame cuando lo hayas hecho ✅`,
+        `¡Perfecto! Anoté tu número (+${phone}). Para poder escribirte los detalles, agrégame como contacto en tu WhatsApp y avísame cuando lo hayas hecho ✅`,
       );
       return true;
     }
@@ -210,7 +218,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       await this.sendAiMessage(
         tenantId,
         conversation,
-        "¡Hola! 👋 Para poder atenderte mejor te pediría tu número de WhatsApp completo (con código de país, ej: +50212345678). Igual contame cómo te puedo ayudar y vamos avanzando 😊",
+        "¡Hola! 👋 Para atenderte mejor, ¿me compartes tu número de WhatsApp completo con el indicativo del país (ej: +57 300 123 4567)? Mientras tanto, cuéntame en qué te puedo ayudar 😊",
       );
       return true;
     }

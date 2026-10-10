@@ -96,7 +96,7 @@ export default function ClientsPage(): React.ReactElement {
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums">{c.ordersCount}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums">
-                    {formatCurrency(c.totalSpentMajor, "GTQ")}
+                    {formatCurrency(c.totalSpentMajor, "COP")}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">
                     {c.lastInteractionAt
@@ -207,7 +207,7 @@ function ClientDetailDialog({ id, onClose }: { id: string | null; onClose: () =>
                   Total gastado
                 </div>
                 <div className="mt-0.5 text-lg font-semibold">
-                  {formatCurrency(data.totalSpentMajor, "GTQ")}
+                  {formatCurrency(data.totalSpentMajor, "COP")}
                 </div>
               </div>
               {data.email && (

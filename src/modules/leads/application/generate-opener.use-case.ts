@@ -18,7 +18,7 @@ export interface GeneratedOpenerDto {
   content: string;
 }
 
-const SYSTEM_PROMPT = `Sos experto en mensajes en frío por WhatsApp para captar leads B2B y B2C.
+const SYSTEM_PROMPT = `Eres experto en mensajes en frío por WhatsApp para captar leads B2B y B2C.
 
 REGLAS:
 - Mensajes BREVES (máximo 2 oraciones, ideal 1).

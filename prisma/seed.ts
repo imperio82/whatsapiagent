@@ -194,7 +194,7 @@ async function main(): Promise<void> {
     await prisma.product.upsert({
       where: { tenantId_sku: { tenantId: tenant.id, sku: p.sku } },
       update: {},
-      create: { ...p, tenantId: tenant.id, currency: "GTQ" },
+      create: { ...p, tenantId: tenant.id, currency: "COP" },
     });
   }
 

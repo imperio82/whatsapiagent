@@ -30,7 +30,7 @@ export function ProductForm({ initial, onSubmit, submitting, onCancel }: Product
       name: initial?.name ?? "",
       description: initial?.description ?? "",
       priceMajor: initial?.priceMajor ?? 0,
-      currency: initial?.currency ?? "GTQ",
+      currency: initial?.currency ?? "COP",
       trackInventory: initial?.trackInventory ?? true,
       stock: initial?.stock ?? 0,
       imageUrl: initial?.imageUrl ?? "",
@@ -66,7 +66,7 @@ export function ProductForm({ initial, onSubmit, submitting, onCancel }: Product
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="currency">Moneda</Label>
-          <Input id="currency" {...register("currency")} placeholder="GTQ" />
+          <Input id="currency" {...register("currency")} placeholder="COP" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="priceMajor">Precio</Label>

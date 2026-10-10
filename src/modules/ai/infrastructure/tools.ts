@@ -1,6 +1,16 @@
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { isLidJid, jidLocalPart } from "@shared/domain/wa-jid";
 import type { AITool } from "../domain/ports/ai-provider";
+import { rankProducts } from "../domain/product-search";
+
+/** Catálogo máximo que se revisa en memoria por búsqueda (pymes: cientos de productos). */
+const MAX_CATALOG_SCAN = 1000;
+
+class InsufficientStockError extends Error {
+  constructor(readonly detalle: Array<{ name: string; pedido: number; disponible: number }>) {
+    super("stock_insuficiente");
+  }
+}
 
 /**
  * Tools que la IA puede invocar durante una conversación. Se construyen
@@ -64,7 +74,7 @@ export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
     {
       name: "search_products",
       description:
-        "Busca productos del catálogo del negocio por nombre. Devuelve precios, stock y descripción. Usalo siempre antes de cotizar.",
+        "Busca productos del catálogo por nombre, SKU o descripción (tolera tildes y plurales). Devuelve precio, stock y descripción. Úsala siempre antes de cotizar.",
       parameters: {
         type: "object",
         properties: {
@@ -79,24 +89,14 @@ export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
       },
       async execute(args) {
         const query = typeof args.query === "string" ? args.query : "";
-        const limit = typeof args.limit === "number" ? Math.min(args.limit, 10) : 5;
-        const products = await prisma.product.findMany({
-          where: {
-            tenantId,
-            status: "ACTIVE",
-            ...(query
-              ? {
-                  OR: [
-                    { name: { contains: query, mode: "insensitive" } },
-                    { sku: { contains: query, mode: "insensitive" } },
-                    { description: { contains: query, mode: "insensitive" } },
-                  ],
-                }
-              : {}),
-          },
-          take: limit,
-          orderBy: query ? undefined : { updatedAt: "desc" },
+        const limit = typeof args.limit === "number" ? Math.min(Math.max(1, args.limit), 10) : 5;
+        // Se busca en memoria para tolerar tildes, plurales y "500g": el catálogo de una pyme es pequeño
+        const catalog = await prisma.product.findMany({
+          where: { tenantId, status: "ACTIVE" },
+          orderBy: { updatedAt: "desc" },
+          take: MAX_CATALOG_SCAN,
         });
+        const products = rankProducts(query, catalog, limit);
 
         return JSON.stringify(
           products.map((p) => ({
@@ -115,7 +115,7 @@ export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
     {
       name: "get_business_info",
       description:
-        "Obtiene información del negocio: nombre, rubro, dirección, descripción. Usalo si el cliente pregunta a qué se dedica el negocio, dónde está, etc.",
+        "Obtiene la información del negocio: nombre, rubro, dirección, descripción, horario, envíos, medios de pago y preguntas frecuentes. Úsala si el cliente pregunta por algo de eso.",
       parameters: {
         type: "object",
         properties: {},
@@ -130,6 +130,10 @@ export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
           industry: t.industry,
           address: t.address,
           description: t.description,
+          businessHours: t.businessHours,
+          deliveryInfo: t.deliveryInfo,
+          paymentInfo: t.paymentInfo,
+          faq: t.faq,
         });
       },
     },
@@ -137,7 +141,7 @@ export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
     {
       name: "create_pending_order",
       description:
-        "Crea un pedido en estado PENDING_PAYMENT cuando el cliente confirma que quiere comprar. Solo invocar cuando el cliente confirmó explícitamente productos y cantidades. NO inventes productos: usá los IDs devueltos por search_products.",
+        "Crea el pedido cuando el cliente confirma que quiere comprar. Solo úsala cuando el cliente confirmó explícitamente productos y cantidades. NO inventes productos: usa los IDs que devolvió search_products. Reserva el stock y devuelve el código y el total.",
       parameters: {
         type: "object",
         properties: {
@@ -171,61 +175,87 @@ export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
           });
         }
 
+        // Cantidades enteras y positivas: no se corrigen en silencio
+        if (items.some((i) => !Number.isInteger(i.quantity) || i.quantity < 1)) {
+          return JSON.stringify({ error: "cantidad_invalida", detalle: "Las cantidades deben ser números enteros mayores a 0." });
+        }
+
         const products = await prisma.product.findMany({
-          where: { tenantId, id: { in: items.map((i) => i.productId) } },
+          where: { tenantId, status: "ACTIVE", id: { in: items.map((i) => i.productId) } },
         });
         const lookup = new Map(products.map((p) => [p.id, p]));
 
-        // 2.2 — validamos ANTES de crear: productos reales y stock suficiente.
+        // 2.2 — validamos ANTES de crear: productos reales y activos.
         const unknownIds = items.filter((i) => !lookup.has(i.productId)).map((i) => i.productId);
         if (unknownIds.length > 0) {
           return JSON.stringify({
             error: "producto_inexistente",
-            detalle: `Estos IDs no están en el catálogo: ${unknownIds.join(", ")}. Usá search_products para obtener IDs válidos. NO inventes productos.`,
+            detalle: `Estos IDs no están en el catálogo: ${unknownIds.join(", ")}. Usa search_products para obtener IDs válidos. NO inventes productos.`,
           });
         }
 
-        const insufficient: Array<{ name: string; pedido: number; disponible: number }> = [];
+        // Las líneas repetidas del mismo producto se suman
+        const quantities = new Map<string, number>();
+        for (const i of items) quantities.set(i.productId, (quantities.get(i.productId) ?? 0) + i.quantity);
+
         let totalCents = 0;
-        const orderItems = items.map((i) => {
-          const p = lookup.get(i.productId)!;
-          const qty = Math.max(1, Math.floor(i.quantity));
-          if (p.trackInventory && p.stock < qty) {
-            insufficient.push({ name: p.name, pedido: qty, disponible: p.stock });
-          }
-          totalCents += p.priceCents * qty;
-          return {
-            productId: p.id,
-            productNameSnap: p.name,
-            unitPriceCents: p.priceCents,
-            quantity: qty,
-          };
+        const orderItems = [...quantities].map(([productId, quantity]) => {
+          const p = lookup.get(productId)!;
+          totalCents += p.priceCents * quantity;
+          return { productId, productNameSnap: p.name, unitPriceCents: p.priceCents, quantity };
         });
 
-        if (insufficient.length > 0) {
-          return JSON.stringify({
-            error: "stock_insuficiente",
-            detalle: insufficient,
-            mensaje:
-              "No hay stock suficiente para algunos productos. Avisale al cliente las cantidades disponibles; no crees el pedido.",
+        let order;
+        try {
+          // Una sola transacción: reserva stock y asigna consecutivo; si algo falla no queda nada guardado
+          order = await prisma.$transaction(async (tx) => {
+            const insufficient: Array<{ name: string; pedido: number; disponible: number }> = [];
+            for (const item of orderItems) {
+              const p = lookup.get(item.productId)!;
+              if (!p.trackInventory) continue;
+              // Condición en el mismo UPDATE: si otro pedido se llevó las unidades, no descuenta
+              const { count } = await tx.product.updateMany({
+                where: { id: p.id, stock: { gte: item.quantity } },
+                data: { stock: { decrement: item.quantity } },
+              });
+              if (count === 0) {
+                const current = await tx.product.findUnique({ where: { id: p.id }, select: { stock: true } });
+                insufficient.push({ name: p.name, pedido: item.quantity, disponible: current?.stock ?? 0 });
+              }
+            }
+            if (insufficient.length > 0) throw new InsufficientStockError(insufficient);
+
+            // El UPDATE bloquea la fila del tenant: dos pedidos no reciben el mismo código
+            const { orderSeq } = await tx.tenant.update({
+              where: { id: tenantId },
+              data: { orderSeq: { increment: 1 } },
+              select: { orderSeq: true },
+            });
+
+            return tx.order.create({
+              data: {
+                tenantId,
+                clientId,
+                code: `PED-${String(orderSeq).padStart(4, "0")}`,
+                status: "PENDING_PAYMENT",
+                totalCents,
+                currency: products[0]?.currency ?? "COP",
+                notes: typeof args.notes === "string" ? args.notes : null,
+                items: { create: orderItems },
+              },
+            });
           });
+        } catch (err) {
+          if (err instanceof InsufficientStockError) {
+            return JSON.stringify({
+              error: "stock_insuficiente",
+              detalle: err.detalle,
+              mensaje:
+                "No hay stock suficiente para algunos productos. Avísale al cliente las cantidades disponibles; el pedido NO se creó.",
+            });
+          }
+          throw err;
         }
-
-        const count = await prisma.order.count({ where: { tenantId } });
-        const code = `ORD-${String(count + 1).padStart(4, "0")}`;
-
-        const order = await prisma.order.create({
-          data: {
-            tenantId,
-            clientId,
-            code,
-            status: "PENDING_PAYMENT",
-            totalCents,
-            currency: products[0]?.currency ?? "GTQ",
-            notes: typeof args.notes === "string" ? args.notes : null,
-            items: { create: orderItems },
-          },
-        });
 
         return JSON.stringify({
           ok: true,

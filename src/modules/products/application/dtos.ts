@@ -5,7 +5,7 @@ export const createProductSchema = z.object({
   name: z.string().min(2).max(120),
   description: z.string().max(2000).optional().nullable(),
   priceMajor: z.number().nonnegative().max(1_000_000),
-  currency: z.string().length(3).default("GTQ"),
+  currency: z.string().length(3).default("COP"),
   trackInventory: z.boolean().default(true),
   stock: z.number().int().min(0).default(0),
   imageUrl: z.string().url().optional().nullable(),

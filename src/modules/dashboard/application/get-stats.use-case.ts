@@ -83,7 +83,7 @@ export class GetDashboardStatsUseCase implements UseCase<void, DashboardStatsDto
     ]);
 
     const salesTodayCents = salesToday._sum.totalCents ?? 0;
-    const currency = recentOrdersRaw[0]?.currency ?? "GTQ";
+    const currency = recentOrdersRaw[0]?.currency ?? "COP";
 
     return {
       salesTodayCents,
