@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { LoginForm } from "@components/features/auth/login-form";
 
 export default function LoginPage(): React.ReactElement {
@@ -10,7 +11,10 @@ export default function LoginPage(): React.ReactElement {
           Entrá a tu cuenta para gestionar tus ventas por WhatsApp.
         </p>
       </div>
-      <LoginForm />
+      {/* LoginForm lee la URL con useSearchParams: sin Suspense falla el build de producción */}
+      <Suspense>
+        <LoginForm />
+      </Suspense>
       <div className="mt-6 text-center text-sm text-muted-foreground">
         ¿No tenés cuenta?{" "}
         <Link href="/register" className="font-medium text-foreground hover:underline">
