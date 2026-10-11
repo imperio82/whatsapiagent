@@ -1,8 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@shared/infrastructure/prisma/client";
-import { getWhatsAppProvider } from "@modules/whatsapp/infrastructure/provider-factory";
-import { MetaCloudProvider } from "@modules/whatsapp/infrastructure/meta/meta-cloud-provider";
+import { getWhatsAppProvider, isMeta } from "@modules/whatsapp/infrastructure/provider-factory";
 import { ensureWhatsAppWired } from "@modules/whatsapp/infrastructure/provider-bootstrap";
 import type { InboundMessage } from "@modules/whatsapp/domain/ports/whatsapp-provider";
 
@@ -52,7 +51,7 @@ export async function POST(req: Request): Promise<Response> {
   // ejecuta TODOS los handlers registrados (no solo el ingest).
   ensureWhatsAppWired();
   const provider = getWhatsAppProvider();
-  if (!(provider instanceof MetaCloudProvider)) {
+  if (!isMeta(provider)) {
     console.warn(
       "[whatsapp webhook] WHATSAPP_PROVIDER no está en 'meta'. Ignorando webhook.",
     );
@@ -98,7 +97,7 @@ function verifySignature(rawBody: string, signature: string | null): boolean {
 
 async function resolveTenantByPhoneNumberId(phoneNumberId: string): Promise<string | null> {
   const account = await prisma.whatsappAccount.findFirst({
-    where: { phoneNumberId, verified: true },
+    where: { provider: "meta", phoneNumberId, verified: true },
   });
   return account?.tenantId ?? null;
 }

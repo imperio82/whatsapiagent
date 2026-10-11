@@ -20,6 +20,11 @@ export interface SendTextParams {
   externalId?: string;
 }
 
+export interface ShowTypingParams {
+  to: string;               // E.164 del cliente
+  inboundMessageId: string; // id del mensaje del cliente que se está respondiendo
+}
+
 export interface SendTextResult {
   providerMessageId: string;
   sentAt: Date;
@@ -54,6 +59,12 @@ export interface WhatsAppProvider {
 
   /** Envía un mensaje de texto. Lanza si no está conectado. */
   sendText(tenantId: string, params: SendTextParams): Promise<SendTextResult>;
+
+  /**
+   * Opcional: marca el mensaje del cliente como leído y muestra "escribiendo…"
+   * mientras la IA prepara la respuesta. Best-effort: nunca debe bloquear el envío.
+   */
+  showTyping?(tenantId: string, params: ShowTypingParams): Promise<void>;
 
   /** Registra un handler global para mensajes entrantes. */
   onInbound(handler: InboundHandler): void;

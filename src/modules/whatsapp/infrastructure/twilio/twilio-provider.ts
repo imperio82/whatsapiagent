@@ -1,4 +1,5 @@
 import { InfrastructureError } from "@shared/domain/errors";
+import { decryptSecret } from "@shared/infrastructure/crypto/secret-box";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import type {
   ConnectionState,
@@ -86,10 +87,8 @@ export class TwilioProvider implements WhatsAppProvider {
       throw new InfrastructureError("Cuenta de WhatsApp (Twilio) no configurada");
     }
 
-    // Nota: twilioAuthTokenEnc debería guardarse cifrado en reposo y
-    // descifrarse acá. Hoy lo usamos en texto plano — pendiente de hardening.
     const auth = Buffer.from(
-      `${account.twilioAccountSid}:${account.twilioAuthTokenEnc}`,
+      `${account.twilioAccountSid}:${decryptSecret(account.twilioAuthTokenEnc)}`,
     ).toString("base64");
 
     const form = new URLSearchParams();

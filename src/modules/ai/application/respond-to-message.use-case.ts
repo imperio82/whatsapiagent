@@ -127,6 +127,14 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       console.log(`[ai respond] flow LID NO manejó (ya se pidió). Cayendo a IA normal.`);
     }
 
+    // "Escribiendo…" mientras la IA piensa (si el proveedor lo soporta). No se espera:
+    // si falla, la respuesta sale igual.
+    if (last.waMessageId && this.whatsapp.showTyping) {
+      this.whatsapp
+        .showTyping(tenantId, { to: conversation.waChatId, inboundMessageId: last.waMessageId })
+        .catch((err) => console.warn("[ai respond] no se pudo mostrar 'escribiendo':", err));
+    }
+
     // Si el cliente retoma después de horas o días, se le avisa al agente en el mismo mensaje
     const chatHistory: ChatMessage[] = orderedMessages.map((m, i) => {
       const note = m.direction === "INBOUND" ? resumeNote(orderedMessages[i - 1]?.sentAt ?? null, m.sentAt) : null;

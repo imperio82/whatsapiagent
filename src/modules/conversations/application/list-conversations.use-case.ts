@@ -15,6 +15,10 @@ export interface ConversationListItem {
   lastMessagePreview: string;
   lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
   unreadCount: number;
+  /** El agente de IA la pasó a una persona y nadie la ha atendido todavía. */
+  needsHuman: boolean;
+  /** Hasta cuándo la IA no responde en esta conversación (null = IA activa). */
+  aiPausedUntil: string | null;
 }
 
 export class ListConversationsUseCase
@@ -27,7 +31,8 @@ export class ListConversationsUseCase
     const status = input.status as "OPEN" | "PENDING_REVIEW" | "CLOSED" | "ARCHIVED" | undefined;
 
     const rows = await prisma.conversation.findMany({
-      where: { tenantId, ...(status ? { status } : {}) },
+      // Sin filtro, el panel principal no muestra las archivadas.
+      where: { tenantId, status: status ?? { not: "ARCHIVED" } },
       include: {
         client: true,
         messages: { orderBy: { sentAt: "desc" }, take: 1 },
@@ -49,6 +54,9 @@ export class ListConversationsUseCase
         lastMessagePreview: last?.content.slice(0, 80) ?? "",
         lastMessageDirection: last?.direction ?? null,
         unreadCount: c.unreadCount,
+        needsHuman: c.status === "PENDING_REVIEW",
+        aiPausedUntil:
+          c.aiPausedUntil && c.aiPausedUntil > new Date() ? c.aiPausedUntil.toISOString() : null,
       };
     });
   }

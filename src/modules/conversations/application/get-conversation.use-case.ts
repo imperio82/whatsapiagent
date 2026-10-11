@@ -9,6 +9,8 @@ export interface ConversationDetail {
   id: string;
   status: "OPEN" | "PENDING_REVIEW" | "CLOSED" | "ARCHIVED";
   unreadCount: number;
+  /** Hasta cuándo la IA no responde en esta conversación (null = IA activa). */
+  aiPausedUntil: string | null;
   client: {
     id: string | null;
     name: string;
@@ -58,6 +60,10 @@ export class GetConversationUseCase implements UseCase<{ id: string; markRead?: 
       id: conv.id,
       status: conv.status,
       unreadCount: input.markRead ? 0 : conv.unreadCount,
+      aiPausedUntil:
+        conv.aiPausedUntil && conv.aiPausedUntil > new Date()
+          ? conv.aiPausedUntil.toISOString()
+          : null,
       client: {
         id: conv.client?.id ?? null,
         name: conv.client?.name ?? label,

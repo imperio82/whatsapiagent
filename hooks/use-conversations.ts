@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { conversationsService } from "@services/conversations.service";
+import { conversationsService, type ConversationAction } from "@services/conversations.service";
 import { ApiError } from "@services/api-client";
 
 const LIST_KEY = "conversations";
@@ -41,4 +41,43 @@ export function useSendMessage(conversationId: string | null) {
       toast.error(msg);
     },
   });
+}
+
+/** Conversaciones que el agente de IA pasó a una persona. Se revisa cada 3 segundos. */
+export function useHandoffQueue() {
+  return useQuery({
+    queryKey: [LIST_KEY, "PENDING_REVIEW"],
+    queryFn: () => conversationsService.list("PENDING_REVIEW"),
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+  });
+}
+
+/** Atender, reactivar la IA, archivar o desarchivar una conversación. */
+export function useConversationAction() {
+  const qc = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: ConversationAction }) =>
+      conversationsService.action(id, action),
+    onSuccess: (_data, { id, action }) => {
+      qc.invalidateQueries({ queryKey: [LIST_KEY] });
+      qc.invalidateQueries({ queryKey: [DETAIL_KEY, id] });
+      if (action === "resume-ai") toast.success("La IA vuelve a responder en esta conversación");
+      if (action === "unarchive") toast.success("Conversación devuelta al panel principal");
+      if (action === "archive") {
+        toast.success("Conversación archivada", {
+          description: "Si el cliente vuelve a escribir, aparece de nuevo.",
+          action: {
+            label: "Deshacer",
+            onClick: () => mutation.mutate({ id, action: "unarchive" }),
+          },
+        });
+      }
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : "No se pudo actualizar la conversación";
+      toast.error(msg);
+    },
+  });
+  return mutation;
 }

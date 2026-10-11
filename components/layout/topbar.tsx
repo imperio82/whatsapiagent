@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { Bell, LogOut, Moon, Search, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useHandoffQueue } from "@hooks/use-conversations";
 import { Avatar, AvatarFallback } from "@components/ui/avatar";
 import { Button } from "@components/ui/button";
 import { WhatsAppStatus } from "./whatsapp-status";
@@ -22,6 +24,8 @@ interface TopbarProps {
 
 export function Topbar({ userName, userEmail }: TopbarProps) {
   const { theme, setTheme } = useTheme();
+  const { data: handoffs } = useHandoffQueue();
+  const pending = handoffs?.length ?? 0;
   const initials = userName
     .split(" ")
     .map((p) => p[0])
@@ -50,8 +54,23 @@ export function Topbar({ userName, userEmail }: TopbarProps) {
           <Sun className="h-4 w-4 dark:hidden" />
           <Moon className="hidden h-4 w-4 dark:block" />
         </Button>
-        <Button size="icon" variant="ghost" aria-label="Notificaciones">
-          <Bell className="h-4 w-4" />
+        <Button
+          asChild
+          size="icon"
+          variant="ghost"
+          aria-label={
+            pending > 0 ? `${pending} clientes esperan a una persona` : "Notificaciones"
+          }
+          className="relative"
+        >
+          <Link href={handoffs?.[0] ? `/chats?c=${handoffs[0].id}` : "/chats"}>
+            <Bell className={pending > 0 ? "h-4 w-4 text-destructive" : "h-4 w-4"} />
+            {pending > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground animate-pulse">
+                {pending}
+              </span>
+            )}
+          </Link>
         </Button>
 
         <DropdownMenu>

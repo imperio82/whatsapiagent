@@ -10,6 +10,7 @@ import {
   useDisconnectWhatsapp,
   useWhatsappStatus,
 } from "@hooks/use-whatsapp";
+import { MetaConfigCard } from "@components/features/whatsapp/meta-config-card";
 import { TwilioConfigCard } from "@components/features/whatsapp/twilio-config-card";
 
 export default function WhatsAppConfigPage(): React.ReactElement {
@@ -54,6 +55,8 @@ export default function WhatsAppConfigPage(): React.ReactElement {
 
       {provider === "twilio" ? (
         <TwilioConfigCard />
+      ) : provider === "meta" ? (
+        <MetaConfigCard />
       ) : (
       <Card>
         <CardContent className="p-6">

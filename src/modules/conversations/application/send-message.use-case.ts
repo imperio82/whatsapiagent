@@ -63,7 +63,12 @@ export class SendMessageUseCase implements UseCase<SendMessageInput, SendMessage
     try {
       await prisma.conversation.update({
         where: { id: conv.id },
-        data: { lastMessageAt: result.sentAt, unreadCount: 0 },
+        data: {
+          lastMessageAt: result.sentAt,
+          unreadCount: 0,
+          // Responder a mano cuenta como atender: se apaga la alerta de "pide una persona".
+          ...(conv.status === "PENDING_REVIEW" ? { status: "OPEN" as const } : {}),
+        },
       });
     } catch (err) {
       console.error("[SendMessageUseCase] update conversation falló:", err);

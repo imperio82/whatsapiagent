@@ -7,6 +7,7 @@ Documentación técnica de los cambios y módulos del proyecto.
 | Documento | Descripción |
 |-----------|-------------|
 | [twilio-integration.md](./twilio-integration.md) | Integración de WhatsApp vía **Twilio** (sandbox / producción) como tercer proveedor. |
+| [meta-integration.md](./meta-integration.md) | Integración de WhatsApp vía **Meta Cloud API**: credenciales por tenant, tokens cifrados y pasos de configuración en Meta. |
 | [ai-chatbot-fase2.md](./ai-chatbot-fase2.md) | Robustez del **chatbot con IA** (FASE 2): pedidos sin clientId, guardrails anti-alucinación, tracking de tokens/costo y fallback de errores. |
 | [migrations.md](./migrations.md) | Estado de las migraciones de Prisma y el drift de la base de datos de desarrollo. |
 

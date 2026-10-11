@@ -134,13 +134,16 @@ export class IngestInboundMessageUseCase
       }
 
       // Solo si realmente insertamos: actualizamos lastMessageAt y
-      // unreadCount. Si la conversación es nueva, también promovemos el
-      // status si estaba cerrada.
+      // unreadCount. Si estaba cerrada o archivada, vuelve al panel principal
+      // (como en WhatsApp: un mensaje nuevo desarchiva el chat).
       await tx.conversation.update({
         where: { id: conversation.id },
         data: {
           clientId: client.id,
-          status: conversation.status === "CLOSED" ? "OPEN" : conversation.status,
+          status:
+            conversation.status === "CLOSED" || conversation.status === "ARCHIVED"
+              ? "OPEN"
+              : conversation.status,
           lastMessageAt: input.timestamp,
           unreadCount: { increment: 1 },
         },

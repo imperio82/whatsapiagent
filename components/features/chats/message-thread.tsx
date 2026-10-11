@@ -4,10 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { AlertTriangle, Bot, Send, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  Archive,
+  ArchiveRestore,
+  Bot,
+  Headset,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@components/ui/button";
 import { cn } from "@lib/utils";
-import { useConversation, useSendMessage } from "@hooks/use-conversations";
+import {
+  useConversation,
+  useConversationAction,
+  useSendMessage,
+} from "@hooks/use-conversations";
 import { useWhatsappStatus } from "@hooks/use-whatsapp";
 
 interface Props {
@@ -19,6 +31,7 @@ export function MessageThread({ conversationId }: Props): React.ReactElement {
   const { data: wpp } = useWhatsappStatus(5000);
   const [draft, setDraft] = useState("");
   const send = useSendMessage(conversationId);
+  const convAction = useConversationAction();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,14 +76,47 @@ export function MessageThread({ conversationId }: Props): React.ReactElement {
             <div className="text-xs text-muted-foreground">{data.client.label}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              data.status === "OPEN" ? "bg-emerald-500" : "bg-muted-foreground/50",
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                data.status === "OPEN" && "bg-emerald-500",
+                data.status === "PENDING_REVIEW" && "animate-pulse bg-destructive",
+                data.status !== "OPEN" &&
+                  data.status !== "PENDING_REVIEW" &&
+                  "bg-muted-foreground/50",
+              )}
+            />
+            {data.status === "OPEN"
+              ? "Activa"
+              : data.status === "PENDING_REVIEW"
+                ? "Pide una persona"
+                : data.status === "ARCHIVED"
+                  ? "Archivada"
+                  : data.status}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={convAction.isPending}
+            onClick={() =>
+              convAction.mutate({
+                id: data.id,
+                action: data.status === "ARCHIVED" ? "unarchive" : "archive",
+              })
+            }
+          >
+            {data.status === "ARCHIVED" ? (
+              <>
+                <ArchiveRestore className="h-3.5 w-3.5" /> Desarchivar
+              </>
+            ) : (
+              <>
+                <Archive className="h-3.5 w-3.5" /> Archivar
+              </>
             )}
-          />
-          {data.status === "OPEN" ? "Activa" : data.status}
+          </Button>
         </div>
       </div>
 
@@ -109,6 +155,36 @@ export function MessageThread({ conversationId }: Props): React.ReactElement {
         )}
         <div ref={endRef} />
       </div>
+
+      {data.aiPausedUntil && (
+        <div
+          className={cn(
+            "flex items-center gap-2 border-t border-border px-4 py-2 text-xs",
+            data.status === "PENDING_REVIEW" ? "bg-destructive/10" : "bg-amber-500/10",
+          )}
+        >
+          <Headset
+            className={cn(
+              "h-4 w-4 shrink-0",
+              data.status === "PENDING_REVIEW" ? "text-destructive" : "text-amber-600",
+            )}
+          />
+          <span className="flex-1">
+            {data.status === "PENDING_REVIEW"
+              ? "El cliente pidió hablar con una persona. La IA no responde hasta las "
+              : "La atiende una persona. La IA no responde hasta las "}
+            {format(new Date(data.aiPausedUntil), "HH:mm", { locale: es })}. Respondele desde acá.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={convAction.isPending}
+            onClick={() => convAction.mutate({ id: data.id, action: "resume-ai" })}
+          >
+            <Bot className="h-3.5 w-3.5" /> Reactivar IA
+          </Button>
+        </div>
+      )}
 
       {wpp?.state.kind === "error" && (
         <div className="flex items-center gap-2 border-t border-border bg-destructive/10 px-4 py-2 text-xs">

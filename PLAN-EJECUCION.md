@@ -52,16 +52,15 @@ Sem 4:  ███░░░░░░   ██░░░░░░   █████
 ## ✅ FASE 2 — Terminar la IA + Evals
 > El agente ya funciona (function calling + 3 tools). Falta robustez y medir calidad.
 
-- [x] **2.1** Manejar `create_pending_order` cuando NO hay `clientId`
-      (crear/asociar cliente automáticamente desde el número de WhatsApp) — `ensureClientId()` en `tools.ts`
-- [x] **2.2** Guardrails: que la IA NO invente productos ni precios (reforzar system prompt + validar
-      stock real en `create_pending_order` + temperatura 0.2)
-- [x] **2.3** Tracking de costo de tokens por conversación — modelo `AiUsageLog` + `pricing.ts` (costo estimado)
-- [ ] **2.4** 🎯 **EVALS** (tu señal #1 de "sé construir con LLMs"): _(pendiente — se hace al final con los tests)_
+- [ ] **2.1** Manejar `create_pending_order` cuando NO hay `clientId`
+      (crear/asociar cliente automáticamente desde el número de WhatsApp)
+- [ ] **2.2** Guardrails: que la IA NO invente productos ni precios (reforzar system prompt + validar)
+- [ ] **2.3** Tracking de costo de tokens por conversación (visible para ti)
+- [ ] **2.4** 🎯 **EVALS** (tu señal #1 de "sé construir con LLMs"):
       - [ ] Dataset de 15-20 conversaciones de prueba (pedido feliz, cliente confundido, fuera de catálogo…)
       - [ ] LLM-as-judge: ¿respondió bien? ¿creó la orden correcta? ¿no inventó?
       - [ ] Script que corre los evals y da un % de acierto
-- [x] **2.5** Manejo de errores: si la IA falla, mensaje de respaldo + alerta (no silencio) — `sendFallback()`
+- [ ] **2.5** Manejo de errores: si la IA falla, mensaje de respaldo + alerta (no silencio)
 
 **✔️ Done cuando:** el bot toma un pedido de punta a punta y tus evals dan >85% de acierto.
 
@@ -158,3 +157,16 @@ Sem 4:  ███░░░░░░   ██░░░░░░   █████
         └──────────────  no programes features nuevas  ──────────┘
                          hasta tener el 1er cliente
 ```
+
+para la configuración del agente se deben de pedir unas reglas básicas para atender los pedidos
+como:
+
+1 periodo de seguimiento en caso de que no compre
+estado de la venta o pedido  ara hacer sguimiento
+métodos de pago debe de ser escrito por el usuario para que ingrese los métodos de pago y los números o qr
+pagina web si tiene
+ el usuario puede seleccionar en que momento el chat  puede pedir los datos del cliente cuanto este list para comprar y realizar el pedido o en otros momentos además en los datos del cliente el usuario puede agregar los datos que puede pedir
+el chat también puede enviar emojis opcional o seguimiento
+el agente puede recibir datos como pdf, doc exel, y guardarlos en nuestra base de datos ya transcritos para que se lean, 
+el cat va a poder usar los chats anteriores para que tenga contexto de la conversación, 
+además se pueden añadir reglas de que puede o no contestar el chat agente 

@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { decryptSecret } from "@shared/infrastructure/crypto/secret-box";
 import { prisma } from "@shared/infrastructure/prisma/client";
-import { getWhatsAppProvider } from "@modules/whatsapp/infrastructure/provider-factory";
-import { TwilioProvider } from "@modules/whatsapp/infrastructure/twilio/twilio-provider";
+import { getWhatsAppProvider, isTwilio } from "@modules/whatsapp/infrastructure/provider-factory";
 import { ensureWhatsAppWired } from "@modules/whatsapp/infrastructure/provider-bootstrap";
 import type { InboundMessage } from "@modules/whatsapp/domain/ports/whatsapp-provider";
 
@@ -50,14 +50,19 @@ export async function POST(req: Request): Promise<Response> {
   if (process.env.TWILIO_VALIDATE_SIGNATURE === "true") {
     const signature = req.headers.get("x-twilio-signature");
     const url = buildPublicUrl(req);
-    if (!validateSignature(account.twilioAuthTokenEnc ?? "", url, params, signature)) {
+    if (!validateSignature(
+        account.twilioAuthTokenEnc ? decryptSecret(account.twilioAuthTokenEnc) : "",
+        url,
+        params,
+        signature,
+      )) {
       return new NextResponse("invalid signature", { status: 401 });
     }
   }
 
   ensureWhatsAppWired();
   const provider = getWhatsAppProvider();
-  if (!(provider instanceof TwilioProvider)) {
+  if (!isTwilio(provider)) {
     console.warn(
       "[twilio webhook] WHATSAPP_PROVIDER no está en 'twilio'. Ignorando webhook.",
     );

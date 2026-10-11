@@ -28,6 +28,18 @@ export function getWhatsAppProvider(): WhatsAppProvider {
   return provider;
 }
 
-export function isBaileys(provider: WhatsAppProvider): boolean {
+// Los type guards comparan `kind` y no usan `instanceof`: en dev, Next.js
+// carga copias distintas de cada clase (instrumentation vs. route handlers),
+// así que el singleton puede no ser instancia de la clase que importa la ruta.
+
+export function isBaileys(provider: WhatsAppProvider): provider is BaileysProvider {
   return provider.kind === "baileys";
+}
+
+export function isMeta(provider: WhatsAppProvider): provider is MetaCloudProvider {
+  return provider.kind === "meta";
+}
+
+export function isTwilio(provider: WhatsAppProvider): provider is TwilioProvider {
+  return provider.kind === "twilio";
 }

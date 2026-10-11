@@ -1,7 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { whatsappService, type SaveTwilioInput } from "@services/whatsapp.service";
+import {
+  whatsappService,
+  type SaveMetaInput,
+  type SaveTwilioInput,
+} from "@services/whatsapp.service";
 
 const KEY = "whatsapp-status";
 const ACCOUNT_KEY = "whatsapp-account";
@@ -42,6 +46,17 @@ export function useSaveTwilioAccount() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: SaveTwilioInput) => whatsappService.saveTwilioAccount(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [ACCOUNT_KEY] });
+      qc.invalidateQueries({ queryKey: [KEY] });
+    },
+  });
+}
+
+export function useSaveMetaAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SaveMetaInput) => whatsappService.saveMetaAccount(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [ACCOUNT_KEY] });
       qc.invalidateQueries({ queryKey: [KEY] });

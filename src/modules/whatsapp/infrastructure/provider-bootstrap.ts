@@ -1,8 +1,7 @@
 import { IngestInboundMessageUseCase } from "@modules/conversations/application/ingest-inbound-message.use-case";
 import { RespondToMessageUseCase } from "@modules/ai/application/respond-to-message.use-case";
 import { getAIProvider } from "@modules/ai/infrastructure/provider-factory";
-import { getWhatsAppProvider } from "./provider-factory";
-import { BaileysProvider } from "./baileys/baileys-provider";
+import { getWhatsAppProvider, isBaileys } from "./provider-factory";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -58,7 +57,7 @@ export function ensureWhatsAppWired(): void {
   });
 
   // Auto-rehidratación de sesiones Baileys al arrancar (solo dev provider).
-  if (wpp instanceof BaileysProvider) {
+  if (isBaileys(wpp)) {
     wpp.restoreAllSessions().catch((err) =>
       console.error("[baileys] restoreAllSessions falló:", err),
     );

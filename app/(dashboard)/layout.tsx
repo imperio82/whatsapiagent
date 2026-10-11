@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@modules/auth/infrastructure/auth-config";
 import { Sidebar } from "@components/layout/sidebar";
 import { Topbar } from "@components/layout/topbar";
+import { HandoffAlerts } from "@components/features/chats/handoff-alerts";
 
 export default async function DashboardLayout({
   children,
@@ -23,6 +24,7 @@ export default async function DashboardLayout({
           <div className="mx-auto w-full max-w-7xl px-6 py-6">{children}</div>
         </main>
       </div>
+      <HandoffAlerts />
     </div>
   );
 }

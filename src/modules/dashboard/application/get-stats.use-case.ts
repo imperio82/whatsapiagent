@@ -57,7 +57,7 @@ export class GetDashboardStatsUseCase implements UseCase<void, DashboardStatsDto
         },
       }),
       prisma.conversation.count({
-        where: { tenantId, unreadCount: { gt: 0 } },
+        where: { tenantId, unreadCount: { gt: 0 }, status: { not: "ARCHIVED" } },
       }),
       prisma.lead.count({
         where: {

@@ -11,6 +11,9 @@ export interface MessagingAccount {
   displayPhoneNumber: string | null;
   twilioAccountSid: string | null;
   hasAuthToken: boolean;
+  phoneNumberId: string | null;
+  businessAccountId: string | null;
+  hasAccessToken: boolean;
   verified: boolean;
 }
 
@@ -20,6 +23,12 @@ export interface SaveTwilioInput {
   displayPhoneNumber: string;
 }
 
+export interface SaveMetaInput {
+  phoneNumberId: string;
+  businessAccountId?: string;
+  accessToken: string;
+}
+
 export const whatsappService = {
   getStatus: () => api.get<WhatsAppStatus>("/api/v1/whatsapp/state"),
   connect: () => api.post<WhatsAppStatus>("/api/v1/whatsapp/connect"),
@@ -27,4 +36,6 @@ export const whatsappService = {
   getAccount: () => api.get<MessagingAccount | null>("/api/v1/whatsapp/account"),
   saveTwilioAccount: (input: SaveTwilioInput) =>
     api.patch<MessagingAccount>("/api/v1/whatsapp/account", input),
+  saveMetaAccount: (input: SaveMetaInput) =>
+    api.patch<MessagingAccount>("/api/v1/whatsapp/account", { provider: "meta", ...input }),
 };
