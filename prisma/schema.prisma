@@ -17,25 +17,35 @@ datasource db {
 // ============================================================================
 
 model Tenant {
-  id            String       @id @default(cuid())
-  slug          String       @unique
-  name          String
-  industry      String?
-  address       String?
-  taxId         String?
-  description   String?
-  status        TenantStatus @default(ACTIVE)
-  aiAutoReply   Boolean      @default(false)
-  aiAgentName   String?
+  id               String         @id @default(cuid())
+  slug             String         @unique
+  name             String
+  industry         String?
+  address          String?
+  taxId            String?
+  description      String?
+  status           TenantStatus   @default(ACTIVE)
+  aiAutoReply      Boolean        @default(false)
+  aiAgentName      String?
+  // Tipo de agente: tienda (catálogo y pedidos) o intermediación (inventario de bienes, calificación y citas)
+  agentProfile     AgentProfile   @default(RETAIL)
+  // Número (solo dígitos, con indicativo) al que la IA avisa compradores calientes, ofertas, citas y bienes nuevos
+  ownerNotifyPhone String?
+  // Cuándo se cargaron las reglas por defecto; si el negocio las borra todas, no vuelven a aparecer
+  aiRulesSeededAt  DateTime?
+  // Coincidencias inventario ↔ compradores: el asesor aprueba cada mensaje (APPROVAL) o salen solos (AUTO)
+  matchAlertMode   MatchAlertMode @default(APPROVAL)
   // Contexto que usa el agente de IA para responder (texto libre que escribe el negocio)
-  businessHours String? // horario de atención
-  deliveryInfo  String? // envíos, cobertura, costos y tiempos
-  paymentInfo   String? // medios de pago
-  faq           String? // preguntas frecuentes, políticas de cambios y garantías
+  businessHours    String? // horario de atención
+  deliveryInfo     String? // envíos, cobertura, costos y tiempos
+  paymentInfo      String? // medios de pago
+  faq              String? // preguntas frecuentes, políticas de cambios y garantías
   // Consecutivo de pedidos (se incrementa dentro de la transacción)
-  orderSeq      Int          @default(0)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  orderSeq         Int            @default(0)
+  // Consecutivo de bienes del inventario (INV-0001)
+  listingSeq       Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   memberships     Membership[]
   roles           Role[]
@@ -46,8 +56,22 @@ model Tenant {
   orders          Order[]
   conversations   Conversation[]
   whatsappAccount WhatsappAccount?
+  aiRules         AiRule[]
+  listings        Listing[]
+  appointments    Appointment[]
+  listingMatches  ListingMatch[]
 
   @@map("tenants")
+}
+
+enum MatchAlertMode {
+  APPROVAL // se le propone al asesor y él decide si se envía
+  AUTO // se envía solo, en horario hábil y con límite por cliente
+}
+
+enum AgentProfile {
+  RETAIL // tienda: catálogo, cotización y pedidos
+  BROKERAGE // intermediación de vehículos e inmuebles
 }
 
 enum TenantStatus {
@@ -209,6 +233,7 @@ model Client {
   leads         Lead[]
   orders        Order[]
   conversations Conversation[]
+  appointments  Appointment[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -216,7 +241,7 @@ model Client {
 }
 
 model Lead {
-  id              String     @id @default(cuid())
+  id              String            @id @default(cuid())
   tenantId        String
   clientId        String?
   contactName     String
@@ -226,15 +251,30 @@ model Lead {
   industry        String?
   productInterest String?
   reasonNotBought String?
-  stage           LeadStage  @default(NEW)
-  source          LeadSource @default(WHATSAPP)
+  stage           LeadStage         @default(NEW)
+  source          LeadSource        @default(WHATSAPP)
+  // Intermediación: si el contacto quiere comprar o vender, qué tan listo está y lo que ya respondió
+  leadType        LeadType          @default(BUYER)
+  temperature     LeadTemperature?
+  qualification   Json? // { busca, presupuesto, formaPago, partePago, zona, plazo }
+  aiSummary       String? // resumen para el asesor
+  offerCop        BigInt? // última oferta del comprador, en pesos
+  listingId       String? // bien que le interesa o que quiere vender
+  // Lo que busca, en datos que se pueden cruzar con el inventario (los llena la IA o el asesor)
+  searchKind      ListingKind?
+  searchOperation ListingOperation?
+  budgetMaxCop    BigInt?
+  searchCity      String?
   lastContactAt   DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client  Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  openers LeadOpener[]
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client       Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  listing      Listing?       @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  openers      LeadOpener[]
+  appointments Appointment[]
+  matches      ListingMatch[]
 
   @@index([tenantId, stage])
   @@map("leads")
@@ -247,6 +287,17 @@ enum LeadStage {
   READY_TO_BUY // listo para comprar
   CUSTOMER // ya es cliente
   LOST // perdido
+}
+
+enum LeadType {
+  BUYER
+  SELLER
+}
+
+enum LeadTemperature {
+  HOT // tiene con qué y quiere ver o cerrar pronto
+  WARM // interesado, le falta definir algo
+  COLD // solo está mirando
 }
 
 enum LeadSource {
@@ -484,4 +535,156 @@ model WhatsappAccount {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_accounts")
+}
+
+// ============================================================================
+// REGLAS DE LA IA (editables por el negocio)
+// ============================================================================
+
+// Reglas de negocio que la IA sigue al responder. Viven en la base de datos para que el
+// negocio las cambie sin tocar código. Las instrucciones técnicas (cómo usar cada
+// herramienta) siguen en el código.
+model AiRule {
+  id        String         @id @default(cuid())
+  tenantId  String
+  category  AiRuleCategory
+  title     String
+  content   String
+  isActive  Boolean        @default(true)
+  position  Int            @default(0)
+  // Identifica las reglas que vienen por defecto, para poder restaurarlas
+  systemKey String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, systemKey])
+  @@index([tenantId, isActive])
+  @@map("ai_rules")
+}
+
+enum AiRuleCategory {
+  POLICY // lo que la IA puede y no puede decir o hacer
+  QUALIFICATION // preguntas para calificar al cliente
+  HANDOFF // cuándo pasar la conversación a una persona
+  TONE // trato y estilo
+}
+
+// ============================================================================
+// INVENTARIO DE BIENES (intermediación)
+// ============================================================================
+
+model Listing {
+  id           String           @id @default(cuid())
+  tenantId     String
+  code         String // INV-0001
+  kind         ListingKind
+  operation    ListingOperation @default(SALE)
+  title        String
+  description  String?
+  priceCop     BigInt // pesos colombianos (un inmueble no cabe en Int de centavos)
+  city         String
+  zone         String? // barrio o sector: lo único de la ubicación que ve el comprador
+  attributes   Json? // { "Año": "2021", "Kilometraje": "48.000 km" } o { "Área": "72 m²", "Habitaciones": "3" }
+  photos       String[]
+  status       ListingStatus    @default(AVAILABLE)
+  // Datos privados: la IA nunca los recibe
+  ownerName    String?
+  ownerPhone   String?
+  exactAddress String?
+  privateNotes String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads        Lead[]
+  appointments Appointment[]
+  matches      ListingMatch[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@map("listings")
+}
+
+enum ListingKind {
+  VEHICLE
+  PROPERTY
+  OTHER
+}
+
+enum ListingOperation {
+  SALE
+  RENT
+}
+
+enum ListingStatus {
+  PENDING_REVIEW // lo trajo un vendedor por WhatsApp y falta aprobarlo
+  AVAILABLE
+  RESERVED
+  SOLD
+  ARCHIVED
+}
+
+// Visitas y pruebas de manejo que pide el comprador; un asesor confirma la hora
+model Appointment {
+  id            String            @id @default(cuid())
+  tenantId      String
+  clientId      String?
+  leadId        String?
+  listingId     String?
+  requestedSlot String // lo que pidió el cliente: "jueves en la mañana"
+  scheduledAt   DateTime? // la hora que confirma el asesor
+  status        AppointmentStatus @default(REQUESTED)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client  Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  lead    Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  listing Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  DONE
+  CANCELLED
+}
+
+// Coincidencia entre un bien que entró al inventario y un comprador que busca algo así.
+// Se crea al publicar el bien; el asesor la aprueba (o sale sola en modo AUTO) y se le escribe al cliente.
+model ListingMatch {
+  id        String      @id @default(cuid())
+  tenantId  String
+  listingId String
+  leadId    String
+  score     Int
+  reasons   String // por qué coincide, para el asesor: "busca vehículo · presupuesto hasta $100.000.000"
+  message   String // mensaje sugerido; el asesor lo puede editar antes de enviar
+  status    MatchStatus @default(PENDING)
+  error     String?
+  decidedBy String? // userId del asesor que aprobó o descartó
+  sentAt    DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, leadId])
+  @@index([tenantId, status])
+  @@map("listing_matches")
+}
+
+enum MatchStatus {
+  PENDING // esperando aprobación del asesor
+  SENT
+  DISMISSED
+  FAILED
 }

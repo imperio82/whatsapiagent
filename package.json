@@ -13,6 +13,8 @@
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:demo": "tsx prisma/seed-demo-co.ts",
+    "db:seed:intermediacion": "tsx prisma/seed-demo-intermediacion.ts",
+    "test": "tsx --test src/modules/ai/domain/reply-verifier.test.ts src/modules/matching/domain/match.test.ts",
     "postinstall": "prisma generate",
     "start:prod": "prisma migrate deploy && next start"
   },

@@ -44,7 +44,7 @@ function phoneFromJid(waChatId: string): string {
  * Si la conversación quedó sin `clientId` (caso borde), crea/asocia un
  * cliente derivado del número de WhatsApp. Idempotente por (tenantId, phone).
  */
-async function ensureClientId(tenantId: string, ctx: ToolContext): Promise<string | null> {
+export async function ensureClientId(tenantId: string, ctx: ToolContext): Promise<string | null> {
   if (ctx.clientId) return ctx.clientId;
 
   const phone = phoneFromJid(ctx.waChatId);

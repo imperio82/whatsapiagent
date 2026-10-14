@@ -5,6 +5,10 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Boxes,
+  CalendarClock,
+  Target,
+  Car,
+  ListChecks,
   LayoutDashboard,
   MessageSquare,
   Sparkles,
@@ -15,6 +19,8 @@ import {
   PenSquare,
 } from "lucide-react";
 import { cn } from "@lib/utils";
+import { useCurrentTenant } from "@hooks/use-tenant";
+import { TenantSwitcher } from "./tenant-switcher";
 
 interface NavItem {
   href: string;
@@ -23,26 +29,34 @@ interface NavItem {
   badge?: string;
 }
 
-const NAV: { section: string; items: NavItem[] }[] = [
+/** El menú cambia con el tipo de negocio: la tienda ve pedidos y productos; la intermediación, citas e inventario. */
+const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => [
   {
     section: "Operación",
     items: [
       { href: "/", label: "Resumen", icon: LayoutDashboard },
       { href: "/chats", label: "Conversaciones", icon: MessageSquare },
-      { href: "/pedidos", label: "Pedidos", icon: Receipt },
+      ...(brokerage
+        ? [
+            { href: "/coincidencias", label: "Coincidencias", icon: Target },
+            { href: "/citas", label: "Citas", icon: CalendarClock },
+          ]
+        : [{ href: "/pedidos", label: "Pedidos", icon: Receipt }]),
     ],
   },
   {
     section: "CRM",
     items: [
       { href: "/clientes", label: "Clientes", icon: Users },
-      { href: "/leads", label: "Leads", icon: Sparkles, badge: "IA" },
+      { href: "/leads", label: brokerage ? "Compradores" : "Leads", icon: Sparkles, badge: "IA" },
     ],
   },
   {
     section: "Catálogo",
     items: [
-      { href: "/productos", label: "Productos", icon: Boxes },
+      brokerage
+        ? { href: "/inventario", label: "Inventario", icon: Car }
+        : { href: "/productos", label: "Productos", icon: Boxes },
       { href: "/plantillas", label: "Plantillas", icon: PenSquare },
     ],
   },
@@ -58,31 +72,32 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: "/configuracion/whatsapp", label: "WhatsApp", icon: MessageSquare },
       { href: "/configuracion/ia", label: "IA", icon: Sparkles, badge: "Beta" },
+      { href: "/configuracion/ia/reglas", label: "Reglas de la IA", icon: ListChecks },
       { href: "/configuracion/equipo", label: "Equipo", icon: Users },
       { href: "/configuracion", label: "Configuración", icon: Settings },
     ],
   },
 ];
 
-export function Sidebar({ tenantName }: { tenantName: string }) {
+export function Sidebar({
+  tenantName,
+  tenants,
+  activeTenantId,
+}: {
+  tenantName: string;
+  tenants: { id: string; name: string }[];
+  activeTenantId?: string;
+}) {
   const pathname = usePathname();
+  const { data: tenant } = useCurrentTenant();
+  const nav = navFor(tenant?.agentProfile === "BROKERAGE");
 
   return (
     <aside className="hidden w-60 shrink-0 border-r border-border bg-card md:flex md:flex-col">
-      <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-wa text-wa-foreground">
-          <MessageSquare className="h-4 w-4" strokeWidth={2.5} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{tenantName}</div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            whatsAppia
-          </div>
-        </div>
-      </div>
+      <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} tenantName={tenantName} />
 
       <nav className="flex-1 overflow-y-auto px-2 py-4">
-        {NAV.map((group) => (
+        {nav.map((group) => (
           <div key={group.section} className="mb-5">
             <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
               {group.section}

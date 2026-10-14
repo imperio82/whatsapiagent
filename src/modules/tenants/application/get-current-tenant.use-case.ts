@@ -18,6 +18,9 @@ export interface CurrentTenantDto {
   deliveryInfo: string | null;
   paymentInfo: string | null;
   faq: string | null;
+  agentProfile: "RETAIL" | "BROKERAGE";
+  matchAlertMode: "APPROVAL" | "AUTO";
+  ownerNotifyPhone: string | null;
 }
 
 type TenantRow = Omit<CurrentTenantDto, "aiAutoReply" | "aiAgentName"> & {
@@ -41,6 +44,9 @@ export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
     deliveryInfo: tenant.deliveryInfo,
     paymentInfo: tenant.paymentInfo,
     faq: tenant.faq,
+    agentProfile: tenant.agentProfile,
+    matchAlertMode: tenant.matchAlertMode,
+    ownerNotifyPhone: tenant.ownerNotifyPhone,
   };
 }
 

@@ -31,11 +31,22 @@ import {
   createLeadSchema,
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
+  LEAD_TEMPERATURE_LABELS,
+  QUALIFICATION_LABELS,
   type CreateLeadInput,
   type LeadDto,
   type LeadStageValue,
 } from "@modules/leads/application/dtos";
 import { cn } from "@lib/utils";
+import { Badge, type BadgeProps } from "@components/ui/badge";
+
+const TEMPERATURE_VARIANT: Record<keyof typeof LEAD_TEMPERATURE_LABELS, BadgeProps["variant"]> = {
+  HOT: "destructive",
+  WARM: "warning",
+  COLD: "secondary",
+};
+
+const cop = (value: number) => `$${value.toLocaleString("es-CO")}`;
 
 const STAGE_COLORS: Record<LeadStageValue, string> = {
   NEW: "border-zinc-400",
@@ -120,6 +131,13 @@ export default function LeadsPage(): React.ReactElement {
 
 function LeadCard({ lead, onOpeners }: { lead: LeadDto; onOpeners: () => void }) {
   const update = useUpdateLead();
+  const [editingSearch, setEditingSearch] = useState(false);
+  const searchSummary = [
+    lead.searchKind === "VEHICLE" ? "vehículo" : lead.searchKind === "PROPERTY" ? "inmueble" : null,
+    lead.searchOperation === "RENT" ? "arriendo" : lead.searchOperation === "SALE" ? "compra" : null,
+    lead.budgetMaxCop ? `hasta ${cop(lead.budgetMaxCop)}` : null,
+    lead.searchCity,
+  ].filter(Boolean);
 
   return (
     <div className="rounded-md border border-border bg-background p-3 text-sm shadow-sm hover:border-accent-foreground/20">
@@ -140,6 +158,9 @@ function LeadCard({ lead, onOpeners }: { lead: LeadDto; onOpeners: () => void })
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {lead.leadType === "BUYER" && (
+              <DropdownMenuItem onClick={() => setEditingSearch(true)}>Editar qué busca…</DropdownMenuItem>
+            )}
             {LEAD_STAGES.map((s) => (
               <DropdownMenuItem
                 key={s}
@@ -157,11 +178,57 @@ function LeadCard({ lead, onOpeners }: { lead: LeadDto; onOpeners: () => void })
         <Phone className="h-3 w-3" /> {clientPhoneToDisplay(lead.phone)}
       </div>
 
-      {lead.productInterest && (
-        <div className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
-          Interés: {lead.productInterest}
+      {(lead.temperature || lead.leadType === "SELLER") && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {lead.leadType === "SELLER" && <Badge variant="secondary">Vendedor</Badge>}
+          {lead.temperature && (
+            <Badge variant={TEMPERATURE_VARIANT[lead.temperature]}>
+              {lead.temperature === "HOT" ? "🔥 " : ""}
+              {LEAD_TEMPERATURE_LABELS[lead.temperature]}
+            </Badge>
+          )}
         </div>
       )}
+
+      {lead.listing ? (
+        <div className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
+          {lead.leadType === "SELLER" ? "Vende" : "Le interesa"}: {lead.listing.title}
+          {lead.listing.priceCop > 0 && ` (${cop(lead.listing.priceCop)})`}
+        </div>
+      ) : (
+        lead.productInterest && (
+          <div className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
+            Interés: {lead.productInterest}
+          </div>
+        )
+      )}
+
+      {lead.offerCop !== null && (
+        <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">Ofreció {cop(lead.offerCop)}</div>
+      )}
+
+      {Object.keys(lead.qualification).length > 0 && (
+        <dl className="mt-2 space-y-0.5 rounded bg-muted/50 p-2 text-[11px]">
+          {Object.entries(QUALIFICATION_LABELS)
+            .filter(([key]) => lead.qualification[key])
+            .map(([key, label]) => (
+              <div key={key} className="flex gap-1">
+                <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                <dd className="line-clamp-2">{lead.qualification[key]}</dd>
+              </div>
+            ))}
+        </dl>
+      )}
+
+      {lead.leadType === "BUYER" && searchSummary.length > 0 && (
+        <div className="mt-1.5 text-[11px]">
+          <span className="text-muted-foreground">Avisarle si entra:</span> {searchSummary.join(" · ")}
+        </div>
+      )}
+
+      {editingSearch && <SearchDialog lead={lead} onClose={() => setEditingSearch(false)} />}
+
+      {lead.aiSummary && <p className="mt-1.5 line-clamp-3 text-[11px] italic text-muted-foreground">{lead.aiSummary}</p>}
 
       <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
         <span>
@@ -180,6 +247,86 @@ function LeadCard({ lead, onOpeners }: { lead: LeadDto; onOpeners: () => void })
         </button>
       </div>
     </div>
+  );
+}
+
+const SELECT =
+  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+/** Lo que busca el comprador en datos que se cruzan con el inventario nuevo (Coincidencias). */
+function SearchDialog({ lead, onClose }: { lead: LeadDto; onClose: () => void }) {
+  const update = useUpdateLead();
+  const [kind, setKind] = useState(lead.searchKind === "OTHER" ? "" : (lead.searchKind ?? ""));
+  const [operation, setOperation] = useState(lead.searchOperation ?? "");
+  const [budget, setBudget] = useState(lead.budgetMaxCop ? String(lead.budgetMaxCop) : "");
+  const [city, setCity] = useState(lead.searchCity ?? "");
+
+  async function save() {
+    const digits = budget.replace(/\D/g, "");
+    await update.mutateAsync({
+      id: lead.id,
+      input: {
+        searchKind: kind === "VEHICLE" || kind === "PROPERTY" ? kind : null,
+        searchOperation: operation === "SALE" || operation === "RENT" ? operation : null,
+        budgetMaxCop: digits ? Number(digits) : null,
+        searchCity: city.trim() || null,
+      },
+    });
+    onClose();
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Qué busca {lead.contactName}</DialogTitle>
+          <DialogDescription>
+            Cuando entre al inventario un bien que cumpla esto, aparece en Coincidencias para que le avises. Deja vacío lo que no
+            sepas.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="search-kind">Tipo</Label>
+            <select id="search-kind" className={SELECT} value={kind} onChange={(e) => setKind(e.target.value)}>
+              <option value="">Cualquiera</option>
+              <option value="VEHICLE">Vehículo</option>
+              <option value="PROPERTY">Inmueble</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="search-op">Operación</Label>
+            <select id="search-op" className={SELECT} value={operation} onChange={(e) => setOperation(e.target.value)}>
+              <option value="">Cualquiera</option>
+              <option value="SALE">Comprar</option>
+              <option value="RENT">Arrendar</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="search-budget">Presupuesto máximo (COP)</Label>
+            <Input
+              id="search-budget"
+              inputMode="numeric"
+              value={budget ? Number(budget.replace(/\D/g, "")).toLocaleString("es-CO") : ""}
+              onChange={(e) => setBudget(e.target.value.replace(/\D/g, ""))}
+              placeholder="100.000.000"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="search-city">Ciudad o barrio</Label>
+            <Input id="search-city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Manizales" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={save} disabled={update.isPending}>
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

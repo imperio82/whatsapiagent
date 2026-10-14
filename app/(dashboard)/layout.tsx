@@ -17,7 +17,11 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar tenantName={tenantName} />
+      <Sidebar
+        tenantName={tenantName}
+        tenants={session.tenants.map((t) => ({ id: t.id, name: t.name }))}
+        activeTenantId={session.activeTenantId}
+      />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar userName={session.user.name ?? "Usuario"} userEmail={session.user.email ?? ""} />
         <main className="flex-1 overflow-y-auto">

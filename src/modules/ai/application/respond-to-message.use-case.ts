@@ -5,6 +5,9 @@ import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-p
 import { buildBusinessContext, buildSystemPrompt, type SystemPromptInput } from "../infrastructure/system-prompt";
 import { runSalesGraph, type TraceStep } from "../infrastructure/graph/sales-graph";
 import { buildTools } from "../infrastructure/tools";
+import { buildBrokerageTools, formatLeadQualification } from "../infrastructure/brokerage-tools";
+import { loadActiveRules } from "../infrastructure/ai-rules";
+import { GRAPH_PROFILES } from "../infrastructure/graph/profiles";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
 import { formatClientProfile, resumeNote } from "../domain/client-memory";
 
@@ -170,9 +173,26 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         })
       : null;
 
+    // Intermediación: lo que el comprador ya respondió, para no volver a preguntarlo
+    const profile = tenant.agentProfile;
+    const buyerLead =
+      profile === "BROKERAGE" && conversation.clientId
+        ? await prisma.lead.findFirst({
+            where: { tenantId, clientId: conversation.clientId, leadType: "BUYER", stage: { notIn: ["CUSTOMER", "LOST"] } },
+            orderBy: { updatedAt: "desc" },
+            include: { listing: { select: { title: true } } },
+          })
+        : null;
+    const qualification = formatLeadQualification(buyerLead);
+
+    // Reglas de negocio editables (tabla ai_rules)
+    const rules = await loadActiveRules(tenantId, profile);
+
     // Los clientes creados automáticamente se llaman "Cliente 1234": ese nombre no sirve para saludar
     const clientName = conversation.client?.name;
     const promptInput: SystemPromptInput = {
+      profile,
+      rules,
       businessName: tenant.name,
       industry: tenant.industry,
       description: tenant.description,
@@ -183,14 +203,25 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       faq: tenant.faq,
       agentName: tenant.aiAgentName ?? undefined,
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
-      clientProfile,
+      clientProfile: [clientProfile, qualification].filter(Boolean).join("\n\n") || null,
     };
 
-    const tools = buildTools(tenantId, {
+    const toolContext = {
       conversationId: conversation.id,
       clientId: conversation.clientId,
       waChatId: conversation.waChatId,
-    });
+    };
+    const tools =
+      profile === "BROKERAGE"
+        ? buildBrokerageTools(tenantId, {
+            ...toolContext,
+            notifyOwner: tenant.ownerNotifyPhone
+              ? async (text) => {
+                  await this.whatsapp.sendText(tenantId, { to: tenant.ownerNotifyPhone!, text });
+                }
+              : undefined,
+          })
+        : buildTools(tenantId, toolContext);
 
     const engine = aiEngine();
     console.log(
@@ -203,6 +234,8 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           businessContext: buildBusinessContext(promptInput),
           history: chatHistory,
           tools,
+          profile: GRAPH_PROFILES[profile],
+          handoffRules: rules.filter((r) => r.category === "HANDOFF").map((r) => r.content),
         });
         result = { ...graph };
         for (const step of graph.trace) {

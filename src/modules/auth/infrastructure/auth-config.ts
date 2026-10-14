@@ -89,8 +89,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.tenants = user.tenants ?? [];
         token.activeTenantId = user.activeTenantId;
       }
+      // Solo se puede cambiar a un negocio del que el usuario es miembro
       if (trigger === "update" && session?.activeTenantId) {
-        token.activeTenantId = session.activeTenantId as string;
+        const requested = session.activeTenantId as string;
+        if (token.tenants?.some((t) => t.id === requested)) token.activeTenantId = requested;
       }
       return token;
     },
