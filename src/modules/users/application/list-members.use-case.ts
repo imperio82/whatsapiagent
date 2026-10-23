@@ -10,6 +10,8 @@ export interface MemberDto {
   name: string;
   status: "ACTIVE" | "INVITED" | "SUSPENDED";
   roles: Array<{ key: string; name: string }>;
+  /** WhatsApp desde el que habla con el asistente del asesor. */
+  whatsappPhone: string | null;
   joinedAt: string;
 }
 
@@ -34,6 +36,7 @@ export class ListMembersUseCase implements UseCase<void, MemberDto[]> {
       name: m.user.name,
       status: m.status,
       roles: m.roles.map((r) => ({ key: r.role.key, name: r.role.name })),
+      whatsappPhone: m.whatsappPhone,
       joinedAt: m.createdAt.toISOString(),
     }));
   }

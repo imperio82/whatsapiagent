@@ -3,6 +3,7 @@ import { isLidJid, jidLocalPart } from "@shared/domain/wa-jid";
 import type { AITool } from "../domain/ports/ai-provider";
 import { rankProducts } from "../domain/product-search";
 import { appendMemory, isGenericClientName } from "../domain/client-memory";
+import { formatMonthDay, isValidMonthDay } from "@modules/clients/domain/special-dates";
 
 /** Catálogo máximo que se revisa en memoria por búsqueda (pymes: cientos de productos). */
 const MAX_CATALOG_SCAN = 1000;
@@ -44,7 +45,7 @@ function phoneFromJid(waChatId: string): string {
  * Si la conversación quedó sin `clientId` (caso borde), crea/asocia un
  * cliente derivado del número de WhatsApp. Idempotente por (tenantId, phone).
  */
-async function ensureClientId(tenantId: string, ctx: ToolContext): Promise<string | null> {
+export async function ensureClientId(tenantId: string, ctx: ToolContext): Promise<string | null> {
   if (ctx.clientId) return ctx.clientId;
 
   const phone = phoneFromJid(ctx.waChatId);
@@ -125,6 +126,54 @@ export function buildTools(tenantId: string, ctx: ToolContext): AITool[] {
 
         if (Object.keys(data).length > 0) await prisma.client.update({ where: { id: client.id }, data });
         return JSON.stringify({ ok: true, guardado: saved });
+      },
+    },
+
+    {
+      name: "save_special_date",
+      description:
+        "Guarda una fecha especial que el cliente mencione: su cumpleaños, el de alguien cercano (esposa, hijo, mamá…), un aniversario u otra fecha importante. El negocio la usa para felicitarlo. Úsala solo si el cliente la dice; no la pidas si no viene al caso.",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["BIRTHDAY", "ANNIVERSARY", "CUSTOM"], description: "BIRTHDAY cumpleaños, ANNIVERSARY aniversario, CUSTOM otra fecha" },
+          month: { type: "number", description: "Mes, 1 a 12" },
+          day: { type: "number", description: "Día del mes" },
+          year: { type: "number", description: "Año, solo si el cliente lo dijo" },
+          personName: { type: "string", description: "Si la fecha es de otra persona: su nombre y relación, ej 'María (esposa)'. Vacío si es del cliente." },
+          label: { type: "string", description: "Qué se celebra si no es un cumpleaños, ej 'aniversario de bodas'" },
+        },
+        required: ["kind", "month", "day"],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const clientId = await ensureClientId(tenantId, ctx);
+        if (!clientId) return JSON.stringify({ error: "no hay un cliente asociado a la conversación" });
+        const kind = args.kind === "ANNIVERSARY" || args.kind === "CUSTOM" ? args.kind : "BIRTHDAY";
+        const month = Number(args.month);
+        const day = Number(args.day);
+        if (!isValidMonthDay(month, day)) {
+          return JSON.stringify({ error: "fecha_invalida", detalle: "Mes de 1 a 12 y un día que exista en ese mes." });
+        }
+        const rawYear = Number(args.year);
+        const year = Number.isInteger(rawYear) && rawYear > 1900 && rawYear <= new Date().getFullYear() ? rawYear : null;
+        const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 120) : null);
+        const personName = text(args.personName);
+
+        // La misma fecha de la misma persona no se duplica: se actualiza
+        const existing = await prisma.clientDate.findFirst({
+          where: { tenantId, clientId, kind, personName: personName ? { equals: personName, mode: "insensitive" } : null },
+        });
+        const data = {
+          month,
+          day,
+          year: year ?? existing?.year ?? null,
+          label: text(args.label) ?? existing?.label ?? null,
+          isActive: true,
+        };
+        if (existing) await prisma.clientDate.update({ where: { id: existing.id }, data });
+        else await prisma.clientDate.create({ data: { tenantId, clientId, kind, personName, ...data } });
+        return JSON.stringify({ ok: true, guardado: `${personName ?? "cliente"}: ${formatMonthDay({ month, day, year })}` });
       },
     },
 

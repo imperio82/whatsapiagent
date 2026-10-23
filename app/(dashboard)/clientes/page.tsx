@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import Link from "next/link";
+import { Plus, Search, Upload } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { useForm } from "react-hook-form";
@@ -23,6 +24,7 @@ import { useClient } from "@hooks/use-clients";
 import { formatCurrency } from "@lib/utils";
 import { createClientSchema, type CreateClientInput } from "@modules/clients/application/dtos";
 import { clientPhoneToDisplay } from "@shared/domain/wa-jid";
+import { ClientSpecialDetails } from "@components/features/clients/client-special-details";
 
 export default function ClientsPage(): React.ReactElement {
   const [search, setSearch] = useState("");
@@ -39,6 +41,12 @@ export default function ClientsPage(): React.ReactElement {
             Personas que escribieron por WhatsApp o agregaste manualmente.
           </p>
         </div>
+        <div className="flex gap-2">
+        <Button asChild variant="outline">
+          <Link href="/configuracion/datos?destino=clientes">
+            <Upload className="h-4 w-4" /> Importar
+          </Link>
+        </Button>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>
             <Button>
@@ -47,6 +55,7 @@ export default function ClientsPage(): React.ReactElement {
           </DialogTrigger>
           <CreateClientDialog onClose={() => setCreating(false)} />
         </Dialog>
+        </div>
       </div>
 
       <div className="relative max-w-sm">
@@ -187,7 +196,7 @@ function ClientDetailDialog({ id, onClose }: { id: string | null; onClose: () =>
 
   return (
     <Dialog open={!!id} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         {data ? (
           <>
             <DialogHeader>
@@ -227,6 +236,8 @@ function ClientDetailDialog({ id, onClose }: { id: string | null; onClose: () =>
                 </div>
               )}
             </div>
+
+            <ClientSpecialDetails clientId={id} />
 
             <div className="space-y-1.5">
               <Label>Notas</Label>

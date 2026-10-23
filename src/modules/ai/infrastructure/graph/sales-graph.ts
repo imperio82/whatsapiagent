@@ -12,20 +12,24 @@ import { verifyReply } from "../../domain/reply-verifier";
 import { COMMON_RULES } from "../system-prompt";
 import { createChatModel } from "./chat-model";
 import { toLangChainTools } from "./lc-tools";
+import { GRAPH_PROFILES, type GraphProfile } from "./profiles";
 
 /**
- * Grafo multiagente de ventas por WhatsApp:
+ * Grafo multiagente por WhatsApp:
  *
- *   router ─┬─ ventas ──┐
- *           ├─ pedido ──┼─ verificador ─┬─ END
- *           ├─ info ────┘       │       └─ (falla 2 veces) ─ humano ─ END
- *           └─ humano ─ END     └─ (falla 1 vez) ─ vuelve al mismo especialista con la corrección
+ *   router ─┬─ especialista ─ verificador ─┬─ END
+ *           │   (ventas, pedido, info…)    ├─ (falla 1 vez) ─ vuelve al especialista con la corrección
+ *           │                              └─ (falla 2 veces) ─ humano ─ END
+ *           └─ humano ─ END
  *
- * Los especialistas razonan con IA y usan herramientas; el verificador es código fijo:
- * "el agente razona y el flujo repite los pasos que no pueden fallar".
+ * Qué especialistas hay y qué herramientas usa cada uno depende del perfil del negocio
+ * (tienda o intermediación, ver profiles.ts). Los especialistas razonan con IA y usan
+ * herramientas; el verificador es código fijo: "el agente razona y el flujo repite los pasos
+ * que no pueden fallar".
  */
 
-export type Intent = "ventas" | "pedido" | "info" | "humano";
+/** Intención que eligió el router: un especialista del perfil o "humano". */
+export type Intent = string;
 
 export interface TraceStep {
   node: string;
@@ -65,7 +69,7 @@ const last = <T>(_a: T, b: T) => b;
 
 const State = Annotation.Root({
   ...MessagesAnnotation.spec,
-  intent: Annotation<Intent>({ reducer: last, default: () => "ventas" }),
+  intent: Annotation<Intent>({ reducer: last, default: () => "" }),
   reply: Annotation<string>({ reducer: last, default: () => "" }),
   attempts: Annotation<number>({ reducer: last, default: () => 0 }),
   correction: Annotation<string | null>({ reducer: last, default: () => null }),
@@ -84,45 +88,20 @@ const State = Annotation.Root({
 });
 type GraphState = typeof State.State;
 
-const SPECIALISTS: Record<Exclude<Intent, "humano">, { tools: string[]; rules: string }> = {
-  ventas: {
-    tools: ["search_products", "get_business_info", "save_client_info"],
-    rules: `ERES EL AGENTE DE VENTAS. Ayudas al cliente a encontrar productos y le cotizas.
-- Usa search_products antes de mencionar o cotizar cualquier producto. Busca por el tipo de producto en 1 o 2 palabras ("arroz", "jabón rey"); la marca, el tamaño o la presentación revísalos en los resultados.
-- Si no hay resultados, intenta una vez más con otra palabra (sinónimo o singular). Si tampoco, di con honestidad que no lo manejas.
-- Recomienda máximo 3 productos, con nombre y precio. Si da cantidades, puedes decir el subtotal de cada producto (precio × cantidad).
-- Tú no creas pedidos. Si el cliente quiere comprar, confirma productos y cantidades y pregúntale si quiere que se lo deje listo.
-- Si solo está consultando, responde sin insistir en la venta.`,
-  },
-  pedido: {
-    tools: ["search_products", "create_pending_order", "save_client_info"],
-    rules: `ERES EL AGENTE DE PEDIDOS. El cliente quiere comprar.
-1. Identifica en la conversación qué productos y cuántas unidades pidió.
-2. Llama search_products para obtener los IDs y precios actuales (el historial no trae los IDs).
-3. Si el cliente ya confirmó de forma explícita productos y cantidades, crea el pedido con create_pending_order. Si falta un dato (cuál producto exacto, cuántas unidades), pregunta solo eso.
-4. Con el pedido creado, dile el código y el total EXACTOS que devolvió la herramienta y cómo puede pagar según los medios de pago del negocio.
-5. Si la herramienta devuelve un error (stock_insuficiente, producto_inexistente), NO digas que se creó: explica qué pasó y ofrece una alternativa.
-6. Si en esta conversación ya se creó un pedido (aparece un código PED-), NO vuelvas a incluir sus productos: lo que el cliente agregue va en un pedido adicional solo con los productos nuevos, y díselo así ("te dejé un pedido adicional").`,
-  },
-  info: {
-    tools: ["get_business_info", "save_client_info"],
-    rules: `ERES EL AGENTE DE INFORMACIÓN. Respondes sobre horario, envíos, medios de pago, dirección y políticas.
-- Usa solo la INFORMACIÓN DEL NEGOCIO (o get_business_info). Si el dato no está, dilo y ofrece pasar con una persona.
-- Si además pregunta por productos o precios, dile que con gusto le ayudas a buscarlos; no des precios de productos tú.`,
-  },
-};
+const routerSchema = (intents: readonly [string, ...string[]]) =>
+  z.object({
+    intent: z.enum([...intents, "humano"] as [string, ...string[]]),
+    reason: z.string().describe("Por qué, en pocas palabras"),
+  });
 
-const ROUTER_PROMPT = `Clasifica el ÚLTIMO mensaje del cliente de una tienda que atiende por WhatsApp, teniendo en cuenta la conversación:
-- "ventas": saludos, preguntas por productos, precios, disponibilidad o recomendaciones.
-- "pedido": el cliente confirma que quiere comprar o pide cantidades concretas para que se las manden ("sí, mándame 2", "lo llevo", "quiero 10 de arroz").
-- "info": horario, envíos o domicilios, medios de pago, dirección, cambios, garantías, el estado de un pedido anterior u otras políticas.
-- "humano": pide hablar con una persona, está molesto o se queja, o el tema no tiene que ver con el negocio.
-Si dudas entre ventas y otra, elige "ventas".`;
-
-const routerSchema = z.object({
-  intent: z.enum(["ventas", "pedido", "info", "humano"]),
-  reason: z.string().describe("Por qué, en pocas palabras"),
-});
+/** Las herramientas que entregan la conversación a una persona lo indican con "handoff": true. */
+function asksForHandoff(output: string): boolean {
+  try {
+    return (JSON.parse(output) as { handoff?: unknown }).handoff === true;
+  } catch {
+    return false;
+  }
+}
 
 function textOf(message: BaseMessage): string {
   const c = message.content;
@@ -145,23 +124,42 @@ export async function runSalesGraph(input: {
   businessContext: string;
   history: ChatMessage[];
   tools: AITool[];
+  /** Perfil del negocio; por defecto, tienda. */
+  profile?: GraphProfile;
+  /** Reglas del negocio sobre cuándo pasar a una persona (de la base de datos), para el router. */
+  handoffRules?: string[];
 }): Promise<GraphTurnResult> {
+  const profile = input.profile ?? GRAPH_PROFILES.RETAIL;
   const { model, modelName, provider } = createChatModel();
   const lcTools = toLangChainTools(input.tools);
+  // Las aclaraciones del perfil van al final, después de las reglas del negocio, para que pesen más
+  const routerPrompt = [
+    profile.routerPrompt,
+    input.handoffRules?.length
+      ? `Además, según las reglas del negocio, elige "humano" en estos casos:\n${input.handoffRules.map((r) => `- ${r}`).join("\n")}`
+      : "",
+    profile.routerExceptions ?? "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  // Lo que escribió el cliente: los montos que dio (presupuesto, oferta) se pueden repetir
+  const clientText = input.history.filter((m) => m.role === "user").map((m) => m.content).join("\n");
 
   // ── router: clasifica la intención con salida estructurada ──────────────
   async function router(state: GraphState): Promise<Partial<GraphState>> {
     const started = Date.now();
-    const classifier = model.withStructuredOutput(routerSchema, { name: "clasificar_mensaje", includeRaw: true });
+    const classifier = model.withStructuredOutput(routerSchema(profile.intents), { name: "clasificar_mensaje", includeRaw: true });
     const transcript = state.messages
       .slice(-8)
-      .map((m) => `${m instanceof HumanMessage ? "Cliente" : "Tienda"}: ${textOf(m)}`)
+      .map((m) => `${m instanceof HumanMessage ? "Cliente" : profile.businessLabel}: ${textOf(m)}`)
       .join("\n");
     const { raw, parsed } = await classifier.invoke([
-      new SystemMessage(ROUTER_PROMPT),
+      new SystemMessage(routerPrompt),
       new HumanMessage(transcript),
     ]);
-    const intent: Intent = parsed?.intent ?? "ventas";
+    const chosen = parsed?.intent as string | undefined;
+    const intent: Intent =
+      chosen === "humano" || (chosen && profile.specialists[chosen]) ? chosen : profile.defaultIntent;
     return {
       intent,
       usage: usageOf(raw),
@@ -170,66 +168,78 @@ export async function runSalesGraph(input: {
   }
 
   // ── especialista: ciclo razonar → herramientas → responder ──────────────
-  function specialist(name: Exclude<Intent, "humano">) {
-    const spec = SPECIALISTS[name];
-    const tools = spec.tools.flatMap((t) => (lcTools.has(t) ? [lcTools.get(t)!] : []));
-    const bound = model.bindTools!(tools);
+  // Cada especialista del perfil con sus herramientas; el nodo elige según la intención
+  const bound = new Map(
+    Object.entries(profile.specialists).map(([name, spec]) => [
+      name,
+      model.bindTools!(spec.tools.flatMap((t) => (lcTools.has(t) ? [lcTools.get(t)!] : []))),
+    ]),
+  );
 
-    return async (state: GraphState): Promise<Partial<GraphState>> => {
-      const started = Date.now();
-      const correction = state.correction
-        ? `\n\nCORRECCIÓN OBLIGATORIA: tu respuesta anterior se rechazó porque ${state.correction} Vuelve a consultar las herramientas y usa solo sus datos.`
-        : "";
-      const messages: BaseMessage[] = [
-        new SystemMessage(`${input.businessContext}\n${spec.rules}\n\n${COMMON_RULES}${correction}`),
-        ...state.messages,
-      ];
-      const trace: TraceStep[] = [];
-      const outputs: string[] = [];
-      const usage: Usage = { tokensIn: 0, tokensOut: 0, toolCalls: 0 };
+  async function specialist(state: GraphState): Promise<Partial<GraphState>> {
+    const name = profile.specialists[state.intent] ? state.intent : profile.defaultIntent;
+    const spec = profile.specialists[name]!;
+    const withTools = bound.get(name)!;
+    const started = Date.now();
+    const correction = state.correction
+      ? `\n\nCORRECCIÓN OBLIGATORIA: tu respuesta anterior se rechazó porque ${state.correction} Vuelve a consultar las herramientas y usa solo sus datos.`
+      : "";
+    const messages: BaseMessage[] = [
+      new SystemMessage(`${input.businessContext}\n${spec.rules}\n\n${COMMON_RULES}${correction}`),
+      ...state.messages,
+    ];
+    const trace: TraceStep[] = [];
+    const outputs: string[] = [];
+    const usage: Usage = { tokensIn: 0, tokensOut: 0, toolCalls: 0 };
 
-      for (let step = 0; step < MAX_TOOL_STEPS; step++) {
-        const ai = (await bound.invoke(messages)) as AIMessage;
-        const u = usageOf(ai);
-        usage.tokensIn += u.tokensIn;
-        usage.tokensOut += u.tokensOut;
-        messages.push(ai);
+    for (let step = 0; step < MAX_TOOL_STEPS; step++) {
+      const ai = (await withTools.invoke(messages)) as AIMessage;
+      const u = usageOf(ai);
+      usage.tokensIn += u.tokensIn;
+      usage.tokensOut += u.tokensOut;
+      messages.push(ai);
 
-        if (!ai.tool_calls?.length) {
-          trace.push({ node: name, type: "respuesta", ms: Date.now() - started });
-          return { reply: textOf(ai).trim(), trace, toolOutputs: outputs, usage, correction: null };
-        }
-
-        for (const call of ai.tool_calls) {
-          const t = lcTools.get(call.name);
-          const started = Date.now();
-          // Un pedido ya creado en este turno (por ejemplo, antes de un reintento) no se vuelve a crear
-          const previousOrder =
-            call.name === "create_pending_order"
-              ? [...state.toolOutputs, ...outputs].find((o) => o.includes('"orderCode"') && o.includes('"ok":true'))
-              : undefined;
-          const output = previousOrder
-            ? JSON.stringify({ ...JSON.parse(previousOrder), nota: "Este pedido ya se creó en este turno; no se creó otro." })
-            : t && spec.tools.includes(call.name)
-              ? String(await t.invoke(call.args))
-              : JSON.stringify({ error: `herramienta no disponible para ${name}: ${call.name}` });
-          usage.toolCalls += 1;
-          outputs.push(output);
-          messages.push(new ToolMessage({ content: output, tool_call_id: call.id ?? call.name }));
-          trace.push({
-            node: name,
-            type: "herramienta",
-            tool: call.name,
-            args: call.args,
-            result: truncate(output),
-            ms: Date.now() - started,
-          });
-        }
+      if (!ai.tool_calls?.length) {
+        trace.push({ node: name, type: "respuesta", ms: Date.now() - started });
+        return {
+          reply: textOf(ai).trim(),
+          trace,
+          toolOutputs: outputs,
+          usage,
+          correction: null,
+          ...(outputs.some(asksForHandoff) ? { handoff: true } : {}),
+        };
       }
 
-      trace.push({ node: name, type: "respuesta", detail: "se alcanzó el máximo de pasos sin respuesta" });
-      return { reply: "", trace, toolOutputs: outputs, usage, correction: null };
-    };
+      for (const call of ai.tool_calls) {
+        const t = lcTools.get(call.name);
+        const started = Date.now();
+        // Un pedido ya creado en este turno (por ejemplo, antes de un reintento) no se vuelve a crear
+        const previousOrder =
+          call.name === "create_pending_order"
+            ? [...state.toolOutputs, ...outputs].find((o) => o.includes('"orderCode"') && o.includes('"ok":true'))
+            : undefined;
+        const output = previousOrder
+          ? JSON.stringify({ ...JSON.parse(previousOrder), nota: "Este pedido ya se creó en este turno; no se creó otro." })
+          : t && spec.tools.includes(call.name)
+            ? String(await t.invoke(call.args))
+            : JSON.stringify({ error: `herramienta no disponible para ${name}: ${call.name}` });
+        usage.toolCalls += 1;
+        outputs.push(output);
+        messages.push(new ToolMessage({ content: output, tool_call_id: call.id ?? call.name }));
+        trace.push({
+          node: name,
+          type: "herramienta",
+          tool: call.name,
+          args: call.args,
+          result: truncate(output),
+          ms: Date.now() - started,
+        });
+      }
+    }
+
+    trace.push({ node: name, type: "respuesta", detail: "se alcanzó el máximo de pasos sin respuesta" });
+    return { reply: "", trace, toolOutputs: outputs, usage, correction: null };
   }
 
   // ── verificador: código fijo, sin IA ─────────────────────────────────────
@@ -237,6 +247,7 @@ export async function runSalesGraph(input: {
     const result = verifyReply(state.reply, {
       toolOutputs: state.toolOutputs,
       businessContext: input.businessContext,
+      clientText,
     });
     const step: TraceStep = {
       node: "verificador",
@@ -255,7 +266,7 @@ export async function runSalesGraph(input: {
 
   function afterVerification(state: GraphState): string {
     if (state.verified) return END;
-    return state.attempts <= MAX_RETRIES ? state.intent : "humano";
+    return state.attempts <= MAX_RETRIES ? "especialista" : "humano";
   }
 
   // ── humano: entrega a una persona del equipo ─────────────────────────────
@@ -273,17 +284,16 @@ export async function runSalesGraph(input: {
 
   const graph = new StateGraph(State)
     .addNode("router", router)
-    .addNode("ventas", specialist("ventas"))
-    .addNode("pedido", specialist("pedido"))
-    .addNode("info", specialist("info"))
+    .addNode("especialista", specialist)
     .addNode("verificador", verificador)
     .addNode("humano", humano)
     .addEdge(START, "router")
-    .addConditionalEdges("router", (s: GraphState) => s.intent, ["ventas", "pedido", "info", "humano"])
-    .addEdge("ventas", "verificador")
-    .addEdge("pedido", "verificador")
-    .addEdge("info", "verificador")
-    .addConditionalEdges("verificador", afterVerification, ["ventas", "pedido", "info", "humano", END])
+    .addConditionalEdges("router", (s: GraphState) => (s.intent === "humano" ? "humano" : "especialista"), [
+      "especialista",
+      "humano",
+    ])
+    .addEdge("especialista", "verificador")
+    .addConditionalEdges("verificador", afterVerification, ["especialista", "humano", END])
     .addEdge("humano", END)
     .compile();
 

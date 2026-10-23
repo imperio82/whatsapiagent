@@ -32,6 +32,11 @@ export type CreateLeadInput = z.infer<typeof createLeadSchema>;
 
 export const updateLeadSchema = createLeadSchema.partial().extend({
   stage: z.enum(LEAD_STAGES).optional(),
+  // Qué busca (intermediación): con esto se cruza con el inventario nuevo
+  searchKind: z.enum(["VEHICLE", "PROPERTY"]).nullable().optional(),
+  searchOperation: z.enum(["SALE", "RENT"]).nullable().optional(),
+  budgetMaxCop: z.number().int().min(0).max(100_000_000_000).nullable().optional(),
+  searchCity: z.string().trim().max(80).nullable().optional(),
 });
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
 
@@ -49,4 +54,26 @@ export interface LeadDto {
   lastContactAt: string | null;
   createdAt: string;
   openersCount: number;
+  // Intermediación
+  leadType: "BUYER" | "SELLER";
+  temperature: "HOT" | "WARM" | "COLD" | null;
+  qualification: Record<string, string>;
+  aiSummary: string | null;
+  offerCop: number | null;
+  listing: { id: string; code: string; title: string; priceCop: number } | null;
+  searchKind: "VEHICLE" | "PROPERTY" | "OTHER" | null;
+  searchOperation: "SALE" | "RENT" | null;
+  budgetMaxCop: number | null;
+  searchCity: string | null;
 }
+
+export const LEAD_TEMPERATURE_LABELS = { HOT: "Caliente", WARM: "Tibio", COLD: "Frío" } as const;
+
+export const QUALIFICATION_LABELS: Record<string, string> = {
+  busca: "Busca",
+  presupuesto: "Presupuesto",
+  formaPago: "Forma de pago",
+  partePago: "Parte de pago",
+  zona: "Zona",
+  plazo: "Para cuándo",
+};

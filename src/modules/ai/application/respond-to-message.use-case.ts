@@ -5,6 +5,9 @@ import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-p
 import { buildBusinessContext, buildSystemPrompt, type SystemPromptInput } from "../infrastructure/system-prompt";
 import { runSalesGraph, type TraceStep } from "../infrastructure/graph/sales-graph";
 import { buildTools } from "../infrastructure/tools";
+import { buildBrokerageTools, formatLeadQualification } from "../infrastructure/brokerage-tools";
+import { loadActiveRules } from "../infrastructure/ai-rules";
+import { GRAPH_PROFILES } from "../infrastructure/graph/profiles";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
 import { formatClientProfile, resumeNote } from "../domain/client-memory";
 
@@ -14,11 +17,27 @@ const FALLBACK_MESSAGE =
 export interface RespondInput {
   tenantId: string;
   conversationId: string;
+  /** Si llegaron mensajes mientras se respondía el turno anterior, cuándo empezó ese turno. */
+  lateSince?: Date;
 }
 
 const MAX_CONTEXT_MESSAGES = 20;
 /** Pedidos anteriores del cliente que ve el agente. */
 const RECENT_ORDERS = 3;
+
+/** Margen para la hora de WhatsApp (en segundos y con algo de retraso) frente a la del servidor. */
+const LATE_MARGIN_MS = 2000;
+
+/**
+ * Los mensajes que llegaron mientras la IA respondía tienen una hora anterior a esa respuesta,
+ * pero la IA no los leyó: se ponen al final para que los conteste ahora.
+ */
+function arrangeLateInbound<T extends { direction: string; sentAt: Date }>(messages: T[], lateSince?: Date): T[] {
+  if (!lateSince) return messages;
+  const cutoff = lateSince.getTime() - LATE_MARGIN_MS;
+  const isLate = (m: T) => m.direction === "INBOUND" && m.sentAt.getTime() >= cutoff;
+  return [...messages.filter((m) => !isLate(m)), ...messages.filter(isLate)];
+}
 
 /** Tiempo que la IA deja de responder una conversación después de pasarla a una persona. */
 const HANDOFF_PAUSE_MS = 2 * 60 * 60 * 1000;
@@ -69,7 +88,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     private readonly whatsapp: WhatsAppProvider,
   ) {}
 
-  async execute({ tenantId, conversationId }: RespondInput): Promise<void> {
+  async execute({ tenantId, conversationId, lateSince }: RespondInput): Promise<void> {
     console.log(`[ai respond] inicio: tenant=${tenantId} conv=${conversationId}`);
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
@@ -98,13 +117,12 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       return;
     }
 
-    const last = conversation.messages[0];
+    const orderedMessages = arrangeLateInbound([...conversation.messages].reverse(), lateSince);
+    const last = orderedMessages[orderedMessages.length - 1];
     if (!last || last.direction !== "INBOUND") {
       console.log(`[ai respond] SKIP: último mensaje no es INBOUND (dir=${last?.direction ?? "none"})`);
       return;
     }
-
-    const orderedMessages = [...conversation.messages].reverse();
 
     // Flujo especial LID
     const isLid = conversation.waChatId.endsWith("@lid");
@@ -170,9 +188,26 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         })
       : null;
 
+    // Intermediación: lo que el comprador ya respondió, para no volver a preguntarlo
+    const profile = tenant.agentProfile;
+    const buyerLead =
+      profile === "BROKERAGE" && conversation.clientId
+        ? await prisma.lead.findFirst({
+            where: { tenantId, clientId: conversation.clientId, leadType: "BUYER", stage: { notIn: ["CUSTOMER", "LOST"] } },
+            orderBy: { updatedAt: "desc" },
+            include: { listing: { select: { title: true } } },
+          })
+        : null;
+    const qualification = formatLeadQualification(buyerLead);
+
+    // Reglas de negocio editables (tabla ai_rules)
+    const rules = await loadActiveRules(tenantId, profile);
+
     // Los clientes creados automáticamente se llaman "Cliente 1234": ese nombre no sirve para saludar
     const clientName = conversation.client?.name;
     const promptInput: SystemPromptInput = {
+      profile,
+      rules,
       businessName: tenant.name,
       industry: tenant.industry,
       description: tenant.description,
@@ -183,14 +218,25 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       faq: tenant.faq,
       agentName: tenant.aiAgentName ?? undefined,
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
-      clientProfile,
+      clientProfile: [clientProfile, qualification].filter(Boolean).join("\n\n") || null,
     };
 
-    const tools = buildTools(tenantId, {
+    const toolContext = {
       conversationId: conversation.id,
       clientId: conversation.clientId,
       waChatId: conversation.waChatId,
-    });
+    };
+    const tools =
+      profile === "BROKERAGE"
+        ? buildBrokerageTools(tenantId, {
+            ...toolContext,
+            notifyOwner: tenant.ownerNotifyPhone
+              ? async (text) => {
+                  await this.whatsapp.sendText(tenantId, { to: tenant.ownerNotifyPhone!, text });
+                }
+              : undefined,
+          })
+        : buildTools(tenantId, toolContext);
 
     const engine = aiEngine();
     console.log(
@@ -203,6 +249,8 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           businessContext: buildBusinessContext(promptInput),
           history: chatHistory,
           tools,
+          profile: GRAPH_PROFILES[profile],
+          handoffRules: rules.filter((r) => r.category === "HANDOFF").map((r) => r.content),
         });
         result = { ...graph };
         for (const step of graph.trace) {
