@@ -51,6 +51,7 @@ export default function AiRulesPage(): React.ReactElement {
   const remove = useDeleteAiRule();
   const restore = useRestoreAiRules();
   const [editing, setEditing] = useState<Editing>(null);
+  const [tab, setTab] = useState<AiRuleCategoryValue>(CATEGORIES[0]!);
 
   const brokerage = tenant?.agentProfile === "BROKERAGE";
   const activeCount = rules?.filter((r) => r.isActive).length ?? 0;
@@ -77,7 +78,7 @@ export default function AiRulesPage(): React.ReactElement {
           >
             <RotateCcw className="h-4 w-4" /> Restaurar por defecto
           </Button>
-          <Button onClick={() => setEditing({ mode: "create", category: "POLICY" })}>
+          <Button onClick={() => setEditing({ mode: "create", category: tab })}>
             <Plus className="h-4 w-4" /> Nueva regla
           </Button>
         </div>
@@ -95,74 +96,102 @@ export default function AiRulesPage(): React.ReactElement {
         </CardContent>
       </Card>
 
-      {isLoading || !rules ? (
-        <div className="space-y-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-md bg-muted/50" />
-          ))}
-        </div>
-      ) : (
-        CATEGORIES.map((category) => {
-          const items = rules.filter((r) => r.category === category);
+      {/* Una pestaña por sección; las reglas de la sección elegida van en cuadrícula */}
+      <div role="tablist" aria-label="Secciones de reglas" className="flex gap-1 overflow-x-auto border-b border-border">
+        {CATEGORIES.map((category) => {
+          const items = rules?.filter((r) => r.category === category) ?? [];
+          const selected = category === tab;
           return (
-            <section key={category} className="space-y-2">
-              <div className="flex items-end justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-semibold">{RULE_CATEGORY_LABELS[category]}</h2>
-                  <p className="text-xs text-muted-foreground">{CATEGORY_HELP[category]}</p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setEditing({ mode: "create", category })}>
-                  <Plus className="h-3.5 w-3.5" /> Agregar
-                </Button>
-              </div>
-              {items.length === 0 ? (
-                <p className="rounded-md border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
-                  Sin reglas en esta sección.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {items.map((rule, i) => (
-                    <Card key={rule.id} className={rule.isActive ? "" : "opacity-60"}>
-                      <CardContent className="flex items-start gap-3 p-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {category === "QUALIFICATION" ? `${i + 1}. ` : ""}
-                              {rule.title}
-                            </span>
-                            {rule.isDefault && <Badge variant="secondary">Por defecto</Badge>}
-                            {!rule.isActive && <Badge variant="outline">Apagada</Badge>}
-                          </div>
-                          <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{rule.content}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Switch
-                            checked={rule.isActive}
-                            onCheckedChange={(isActive) => update.mutate({ id: rule.id, input: { isActive } })}
-                            aria-label={rule.isActive ? "Apagar regla" : "Activar regla"}
-                          />
-                          <Button variant="ghost" size="icon" onClick={() => setEditing({ mode: "edit", rule })} aria-label="Editar regla">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => remove.mutate(rule.id)}
-                            disabled={remove.isPending}
-                            aria-label="Eliminar regla"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </section>
+            <button
+              key={category}
+              type="button"
+              role="tab"
+              id={`tab-${category}`}
+              aria-selected={selected}
+              aria-controls={`panel-${category}`}
+              onClick={() => setTab(category)}
+              className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm transition-colors ${
+                selected
+                  ? "border-wa font-medium text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {RULE_CATEGORY_LABELS[category]}
+              <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
+                {items.filter((r) => r.isActive).length}/{items.length}
+              </span>
+            </button>
           );
-        })
-      )}
+        })}
+      </div>
+
+      <section role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <p className="max-w-2xl text-sm text-muted-foreground">{CATEGORY_HELP[tab]}</p>
+          <Button variant="outline" size="sm" onClick={() => setEditing({ mode: "create", category: tab })}>
+            <Plus className="h-3.5 w-3.5" /> Agregar a {RULE_CATEGORY_LABELS[tab].toLowerCase()}
+          </Button>
+        </div>
+
+        {isLoading || !rules ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-36 animate-pulse rounded-lg bg-muted/50" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {rules
+              .filter((r) => r.category === tab)
+              .map((rule, i) => (
+                <Card key={rule.id} className={`flex flex-col ${rule.isActive ? "" : "opacity-60"}`}>
+                  <CardContent className="flex flex-1 flex-col gap-2 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-medium leading-snug">
+                        {tab === "QUALIFICATION" ? `${i + 1}. ` : ""}
+                        {rule.title}
+                      </span>
+                      <Switch
+                        checked={rule.isActive}
+                        onCheckedChange={(isActive) => update.mutate({ id: rule.id, input: { isActive } })}
+                        aria-label={rule.isActive ? "Apagar regla" : "Activar regla"}
+                      />
+                    </div>
+                    <p className="flex-1 whitespace-pre-line text-sm text-muted-foreground">{rule.content}</p>
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <div className="flex flex-wrap gap-1">
+                        {rule.isDefault && <Badge variant="secondary">Por defecto</Badge>}
+                        {!rule.isActive && <Badge variant="outline">Apagada</Badge>}
+                      </div>
+                      <div className="flex shrink-0 items-center">
+                        <Button variant="ghost" size="icon" onClick={() => setEditing({ mode: "edit", rule })} aria-label="Editar regla">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => remove.mutate(rule.id)}
+                          disabled={remove.isPending}
+                          aria-label="Eliminar regla"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            <button
+              type="button"
+              onClick={() => setEditing({ mode: "create", category: tab })}
+              className="flex min-h-36 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-sm text-muted-foreground transition-colors hover:border-wa hover:text-foreground"
+            >
+              <Plus className="h-5 w-5" />
+              Nueva regla
+            </button>
+          </div>
+        )}
+      </section>
 
       <RuleDialog editing={editing} onClose={() => setEditing(null)} />
     </div>

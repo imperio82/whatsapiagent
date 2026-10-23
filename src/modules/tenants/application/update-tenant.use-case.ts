@@ -20,6 +20,7 @@ export const updateTenantSchema = z.object({
   faq: z.string().max(5000).nullable().optional(),
   agentProfile: z.enum(["RETAIL", "BROKERAGE"]).optional(),
   matchAlertMode: z.enum(["APPROVAL", "AUTO"]).optional(),
+  advisorAssistant: z.boolean().optional(),
   ownerNotifyPhone: z
     .string()
     .transform((v) => v.replace(/\D/g, ""))

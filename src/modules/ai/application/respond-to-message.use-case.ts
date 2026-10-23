@@ -17,11 +17,27 @@ const FALLBACK_MESSAGE =
 export interface RespondInput {
   tenantId: string;
   conversationId: string;
+  /** Si llegaron mensajes mientras se respondía el turno anterior, cuándo empezó ese turno. */
+  lateSince?: Date;
 }
 
 const MAX_CONTEXT_MESSAGES = 20;
 /** Pedidos anteriores del cliente que ve el agente. */
 const RECENT_ORDERS = 3;
+
+/** Margen para la hora de WhatsApp (en segundos y con algo de retraso) frente a la del servidor. */
+const LATE_MARGIN_MS = 2000;
+
+/**
+ * Los mensajes que llegaron mientras la IA respondía tienen una hora anterior a esa respuesta,
+ * pero la IA no los leyó: se ponen al final para que los conteste ahora.
+ */
+function arrangeLateInbound<T extends { direction: string; sentAt: Date }>(messages: T[], lateSince?: Date): T[] {
+  if (!lateSince) return messages;
+  const cutoff = lateSince.getTime() - LATE_MARGIN_MS;
+  const isLate = (m: T) => m.direction === "INBOUND" && m.sentAt.getTime() >= cutoff;
+  return [...messages.filter((m) => !isLate(m)), ...messages.filter(isLate)];
+}
 
 /** Tiempo que la IA deja de responder una conversación después de pasarla a una persona. */
 const HANDOFF_PAUSE_MS = 2 * 60 * 60 * 1000;
@@ -72,7 +88,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     private readonly whatsapp: WhatsAppProvider,
   ) {}
 
-  async execute({ tenantId, conversationId }: RespondInput): Promise<void> {
+  async execute({ tenantId, conversationId, lateSince }: RespondInput): Promise<void> {
     console.log(`[ai respond] inicio: tenant=${tenantId} conv=${conversationId}`);
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
@@ -101,13 +117,12 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       return;
     }
 
-    const last = conversation.messages[0];
+    const orderedMessages = arrangeLateInbound([...conversation.messages].reverse(), lateSince);
+    const last = orderedMessages[orderedMessages.length - 1];
     if (!last || last.direction !== "INBOUND") {
       console.log(`[ai respond] SKIP: último mensaje no es INBOUND (dir=${last?.direction ?? "none"})`);
       return;
     }
-
-    const orderedMessages = [...conversation.messages].reverse();
 
     // Flujo especial LID
     const isLid = conversation.waChatId.endsWith("@lid");

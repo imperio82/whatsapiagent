@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Building2, Car, Check, ChevronDown, ImageOff, Lock, MapPin, Package, Plus, Search, Target, Users } from "lucide-react";
+import { Building2, Car, Check, ChevronDown, ImageOff, Lock, MapPin, Package, Plus, Search, Target, Upload, Users } from "lucide-react";
 import { Badge, type BadgeProps } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
@@ -70,9 +70,16 @@ export default function InventoryPage(): React.ReactElement {
             Vehículos e inmuebles que la IA ofrece por WhatsApp. Los datos del propietario nunca salen de aquí.
           </p>
         </div>
-        <Button onClick={() => setEditing("new")}>
-          <Plus className="h-4 w-4" /> Agregar bien
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/configuracion/datos?destino=inventario">
+              <Upload className="h-4 w-4" /> Importar
+            </Link>
+          </Button>
+          <Button onClick={() => setEditing("new")}>
+            <Plus className="h-4 w-4" /> Agregar bien
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -1,11 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  ChevronDown,
   Boxes,
   CalendarClock,
+  Cake,
+  Database,
+  Plug,
   Target,
   Car,
   ListChecks,
@@ -21,6 +26,7 @@ import {
 import { cn } from "@lib/utils";
 import { useCurrentTenant } from "@hooks/use-tenant";
 import { TenantSwitcher } from "./tenant-switcher";
+import { useSidebarHidden } from "./sidebar-state";
 
 interface NavItem {
   href: string;
@@ -42,6 +48,7 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
             { href: "/citas", label: "Citas", icon: CalendarClock },
           ]
         : [{ href: "/pedidos", label: "Pedidos", icon: Receipt }]),
+      { href: "/felicitaciones", label: "Felicitaciones", icon: Cake },
     ],
   },
   {
@@ -73,11 +80,33 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
       { href: "/configuracion/whatsapp", label: "WhatsApp", icon: MessageSquare },
       { href: "/configuracion/ia", label: "IA", icon: Sparkles, badge: "Beta" },
       { href: "/configuracion/ia/reglas", label: "Reglas de la IA", icon: ListChecks },
+      { href: "/configuracion/integraciones", label: "Integraciones", icon: Plug },
+      { href: "/configuracion/datos", label: "Fuentes de datos", icon: Database },
       { href: "/configuracion/equipo", label: "Equipo", icon: Users },
       { href: "/configuracion", label: "Configuración", icon: Settings },
     ],
   },
 ];
+
+/** Secciones que el usuario dejó abiertas; se recuerdan entre visitas en este navegador. */
+const OPEN_SECTIONS_KEY = "sidebar-open-sections";
+/** Abiertas hasta que el usuario elija otras: las de conversaciones y productos/inventario. */
+const DEFAULT_OPEN_SECTIONS = ["Operación", "Catálogo"];
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+}
+
+function loadOpenSections(): string[] {
+  try {
+    const raw = localStorage.getItem(OPEN_SECTIONS_KEY);
+    if (raw === null) return DEFAULT_OPEN_SECTIONS;
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : DEFAULT_OPEN_SECTIONS;
+  } catch {
+    return DEFAULT_OPEN_SECTIONS;
+  }
+}
 
 export function Sidebar({
   tenantName,
@@ -91,60 +120,93 @@ export function Sidebar({
   const pathname = usePathname();
   const { data: tenant } = useCurrentTenant();
   const nav = navFor(tenant?.agentProfile === "BROKERAGE");
+  const hidden = useSidebarHidden();
+  // La sección de la página actual siempre se abre
+  const [open, setOpen] = useState<string[]>(DEFAULT_OPEN_SECTIONS);
+  useEffect(() => setOpen(loadOpenSections()), []);
+  const currentSection = nav.find((g) => g.items.some((i) => isActive(pathname, i.href)))?.section;
+
+  function toggle(section: string, isOpen: boolean) {
+    const next = isOpen ? open.filter((s) => s !== section) : [...open, section];
+    setOpen(next);
+    try {
+      localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(next));
+    } catch {
+      // Sin almacenamiento (modo privado): igual funciona, solo no se recuerda
+    }
+  }
 
   return (
-    <aside className="hidden w-60 shrink-0 border-r border-border bg-card md:flex md:flex-col">
-      <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} tenantName={tenantName} />
+    <aside
+      aria-hidden={hidden}
+      inert={hidden}
+      className={cn(
+        "hidden shrink-0 overflow-hidden border-border bg-card transition-[width] duration-300 ease-in-out md:block",
+        hidden ? "w-0" : "w-60 border-r",
+      )}
+    >
+      <div className="flex h-full w-60 flex-col">
+        <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} tenantName={tenantName} />
 
-      <nav className="flex-1 overflow-y-auto px-2 py-4">
-        {nav.map((group) => (
-          <div key={group.section} className="mb-5">
-            <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-              {group.section}
-            </div>
-            <ul className="space-y-px">
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const active =
-                  pathname === item.href ||
-                  (item.href !== "/" && pathname.startsWith(`${item.href}/`));
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={cn(
-                        "group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
-                        active
-                          ? "bg-accent text-accent-foreground font-medium"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          "h-4 w-4 transition-colors",
-                          active ? "text-foreground" : "text-muted-foreground",
-                        )}
-                      />
-                      <span className="flex-1">{item.label}</span>
-                      {item.badge && (
-                        <span className="rounded bg-wa/15 px-1.5 py-0.5 text-[10px] font-semibold text-wa">
-                          {item.badge}
-                        </span>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
+        <nav className="flex-1 overflow-y-auto px-2 py-4">
+          {nav.map((group) => {
+            const isOpen = group.section === currentSection || open.includes(group.section);
+            const listId = `nav-${group.section}`;
+            return (
+              <div key={group.section} className="mb-2">
+                <button
+                  type="button"
+                  onClick={() => toggle(group.section, isOpen)}
+                  aria-expanded={isOpen}
+                  aria-controls={listId}
+                  className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:text-foreground"
+                >
+                  {group.section}
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isOpen ? "" : "-rotate-90")} />
+                </button>
+                {isOpen && (
+                  <ul id={listId} className="mb-2 space-y-px">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = isActive(pathname, item.href);
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            className={cn(
+                              "group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors",
+                              active
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                            )}
+                          >
+                            <Icon
+                              className={cn(
+                                "h-4 w-4 transition-colors",
+                                active ? "text-foreground" : "text-muted-foreground",
+                              )}
+                            />
+                            <span className="flex-1">{item.label}</span>
+                            {item.badge && (
+                              <span className="rounded bg-wa/15 px-1.5 py-0.5 text-[10px] font-semibold text-wa">
+                                {item.badge}
+                              </span>
+                            )}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </nav>
 
-      <div className="border-t border-border p-3">
-        <div className="rounded-md bg-accent/40 p-3 text-xs">
-          <div className="mb-1 font-medium">¿Necesitás ayuda?</div>
-          <div className="text-muted-foreground">
-            Configurá tu cuenta de WhatsApp Business en Ajustes.
+        <div className="border-t border-border p-3">
+          <div className="rounded-md bg-accent/40 p-3 text-xs">
+            <div className="mb-1 font-medium">¿Necesitás ayuda?</div>
+            <div className="text-muted-foreground">Configurá tu cuenta de WhatsApp Business en Ajustes.</div>
           </div>
         </div>
       </div>

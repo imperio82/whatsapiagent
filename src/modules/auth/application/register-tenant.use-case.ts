@@ -1,6 +1,7 @@
 import { ConflictError, ValidationError } from "@shared/domain/errors";
 import type { UseCase } from "@shared/domain/use-case";
 import { prisma } from "@shared/infrastructure/prisma/client";
+import { ensureDefaultRules } from "@modules/ai/infrastructure/ai-rules";
 import { Email } from "../domain/value-objects/email";
 import { Password } from "../domain/value-objects/password";
 import type { PasswordHasher } from "../domain/ports/password-hasher";
@@ -9,6 +10,8 @@ export interface RegisterTenantInput {
   businessName: string;
   slug: string;
   industry?: string;
+  /** Tienda (catálogo y pedidos) o intermediación (vehículos e inmuebles). Define el agente y el panel. */
+  agentProfile?: "RETAIL" | "BROKERAGE";
   ownerEmail: string;
   ownerName: string;
   password: string;
@@ -47,12 +50,15 @@ export class RegisterTenantUseCase implements UseCase<RegisterTenantInput, Regis
 
     const passwordHash = await this.hasher.hash(password.raw);
 
-    return prisma.$transaction(async (tx) => {
+    const agentProfile = input.agentProfile ?? "RETAIL";
+
+    const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           slug,
           name: input.businessName.trim(),
           industry: input.industry?.trim() || null,
+          agentProfile,
         },
       });
 
@@ -83,5 +89,9 @@ export class RegisterTenantUseCase implements UseCase<RegisterTenantInput, Regis
 
       return { tenantId: tenant.id, userId: user.id, slug };
     });
+
+    // Las reglas del agente quedan listas desde el registro. Si falla, la IA las crea al primer mensaje.
+    await ensureDefaultRules(result.tenantId, agentProfile).catch(() => {});
+    return result;
   }
 }

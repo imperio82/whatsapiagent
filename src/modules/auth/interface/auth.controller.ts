@@ -6,6 +6,7 @@ const registerSchema = z.object({
   businessName: z.string().min(2).max(80),
   slug: z.string().min(3).max(32),
   industry: z.string().max(80).optional(),
+  agentProfile: z.enum(["RETAIL", "BROKERAGE"]).default("RETAIL"),
   ownerEmail: z.string().email(),
   ownerName: z.string().min(2).max(80),
   password: z.string().min(8).max(128),

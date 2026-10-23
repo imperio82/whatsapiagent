@@ -3,7 +3,9 @@ import { prisma } from "@shared/infrastructure/prisma/client";
 import type { AITool } from "../domain/ports/ai-provider";
 import { rankProducts } from "../domain/product-search";
 import { isGenericClientName } from "../domain/client-memory";
+import { simulateLoan } from "../domain/financing";
 import { buildTools, ensureClientId, type ToolContext } from "./tools";
+import { SchedulingService } from "@modules/integrations/application/scheduling.service";
 
 /**
  * Herramientas del perfil de intermediación (vehículos e inmuebles). Igual que las de la
@@ -16,6 +18,8 @@ import { buildTools, ensureClientId, type ToolContext } from "./tools";
 export interface BrokerageToolContext extends ToolContext {
   /** Avisa al dueño del negocio por WhatsApp (comprador caliente, oferta, visita, bien nuevo). Best-effort. */
   notifyOwner?: (text: string) => Promise<void>;
+  /** Agenda sobre el calendario conectado (Google u otro). Por defecto, la del negocio. */
+  scheduling?: SchedulingService;
 }
 
 const MAX_INVENTORY_SCAN = 1000;
@@ -68,7 +72,11 @@ async function clientOf(tenantId: string, ctx: ToolContext) {
  * El bien al que se refiere el modelo: acepta el id, el código (INV-0001) o el nombre ("Mazda CX-5").
  * El historial no trae los ids de turnos anteriores, así que el nombre es lo más confiable.
  */
-async function findListing(tenantId: string, ref: unknown): Promise<ListingRow | null> {
+export async function findListing(
+  tenantId: string,
+  ref: unknown,
+  statuses: ListingRow["status"][] = ["AVAILABLE", "RESERVED"],
+): Promise<ListingRow | null> {
   const value = text(ref);
   if (!value) return null;
   const exact = await prisma.listing.findFirst({
@@ -76,7 +84,7 @@ async function findListing(tenantId: string, ref: unknown): Promise<ListingRow |
   });
   if (exact) return exact;
   const inventory = await prisma.listing.findMany({
-    where: { tenantId, status: { in: ["AVAILABLE", "RESERVED"] } },
+    where: { tenantId, status: { in: statuses } },
     take: MAX_INVENTORY_SCAN,
   });
   const [best] = rankProducts(
@@ -162,8 +170,10 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
     }
   };
 
-  // save_client_info y get_business_info son las mismas de la tienda
-  const shared = buildTools(tenantId, ctx).filter((t) => t.name === "save_client_info" || t.name === "get_business_info");
+  // Las herramientas de la ficha del cliente y del negocio son las mismas de la tienda
+  const SHARED = new Set(["save_client_info", "save_special_date", "get_business_info"]);
+  const shared = buildTools(tenantId, ctx).filter((t) => SHARED.has(t.name));
+  const scheduling = ctx.scheduling ?? new SchedulingService();
 
   return [
     ...shared,
@@ -334,17 +344,60 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
     },
 
     {
+      name: "check_availability",
+      description:
+        "Consulta la agenda del negocio y devuelve los horarios libres para visitas o pruebas de manejo en un día. Úsala antes de proponer horarios. Si la agenda no está conectada te lo dice.",
+      parameters: {
+        type: "object",
+        properties: {
+          day: { type: "string", description: "Día que quiere el cliente en formato YYYY-MM-DD (calcúlalo con la fecha de hoy). Vacío = hoy." },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const day = text(args.day) ?? "";
+        try {
+          const result = await scheduling.availability(tenantId, day);
+          if (!result.connected) {
+            return JSON.stringify({
+              agenda: "no_conectada",
+              mensaje: "No hay agenda conectada: propón horarios según las reglas del negocio y registra la solicitud con request_visit sin dateTime.",
+            });
+          }
+          return JSON.stringify({
+            agenda: "conectada",
+            dia: result.day,
+            libres: result.slots.map((s) => ({ dateTime: s.start, texto: s.label })),
+            otrosDias: result.nextDays.map((d) => ({ dia: d.day, libres: d.slots.map((s) => ({ dateTime: s.start, texto: s.label })) })),
+            mensaje:
+              result.slots.length > 0
+                ? "Ofrécele 2 o 3 de estos horarios. Cuando elija uno, agenda con request_visit pasando su dateTime exacto."
+                : "Ese día no hay espacio. Ofrécele horarios de otrosDias.",
+          });
+        } catch (err) {
+          console.warn("[brokerage] no se pudo consultar la agenda:", err);
+          return JSON.stringify({
+            agenda: "error",
+            mensaje: "No pude consultar la agenda. Pregúntale qué día y franja prefiere y registra la solicitud con request_visit sin dateTime; un asesor confirma.",
+          });
+        }
+      },
+    },
+
+    {
       name: "request_visit",
       description:
-        "Registra la solicitud de visita a un inmueble o prueba de manejo de un vehículo con el horario que eligió el cliente. Un asesor confirma la hora y el lugar; la cita NO queda confirmada.",
+        "Agenda la visita a un inmueble o la prueba de manejo de un vehículo. Con dateTime (uno de los horarios libres de check_availability) queda agendada en el calendario del negocio. Sin dateTime, o si no hay agenda conectada, queda como solicitud y un asesor confirma la hora. También sirve para mover una cita ya agendada a otra hora.",
       parameters: {
         type: "object",
         properties: {
           listing: { type: "string", description: "Nombre o código del bien tal como lo devolvió search_listings (ej: 'Mazda CX-5 Grand Touring 2021' o 'INV-0001')" },
-          preferredSlot: { type: "string", description: "Día y franja que eligió el cliente: 'jueves en la mañana'" },
+          dateTime: { type: "string", description: "Horario exacto elegido, tal cual lo devolvió check_availability (ej: '2026-10-16T15:00')" },
+          preferredSlot: { type: "string", description: "Lo que pidió el cliente con sus palabras: 'jueves en la mañana'" },
           notes: { type: "string", description: "Algo que el asesor deba saber" },
         },
-        required: ["listing", "preferredSlot"],
+        required: ["listing"],
         additionalProperties: false,
       },
       async execute(args) {
@@ -352,15 +405,23 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
         if (!client) return JSON.stringify({ error: "no hay un cliente asociado a la conversación" });
         const listing = await findListing(tenantId, args.listing);
         if (!listing) return LISTING_NOT_FOUND;
-        const slot = text(args.preferredSlot) ?? "por definir";
+        const dateTime = text(args.dateTime);
+        const slot = text(args.preferredSlot) ?? dateTime ?? "por definir";
+        const what = listing.kind === "VEHICLE" ? "prueba de manejo" : "visita";
         const lead = await openLead(tenantId, client, "BUYER");
 
-        // Si ya pidió visita a este bien hace poco, se actualiza en vez de duplicar
-        const recent = await prisma.appointment.findFirst({
-          where: { tenantId, clientId: client.id, listingId: listing.id, status: "REQUESTED", createdAt: { gte: new Date(Date.now() - DEDUP_WINDOW_MS) } },
+        // Una cita abierta del cliente para este bien se actualiza (o se mueve) en vez de duplicarse
+        const open = await prisma.appointment.findFirst({
+          where: {
+            tenantId,
+            clientId: client.id,
+            listingId: listing.id,
+            OR: [{ status: "REQUESTED" }, { status: "CONFIRMED", scheduledAt: { gte: new Date() } }],
+          },
+          orderBy: { createdAt: "desc" },
         });
-        const appointment = recent
-          ? await prisma.appointment.update({ where: { id: recent.id }, data: { requestedSlot: slot, notes: text(args.notes) ?? recent.notes } })
+        const appointment = open
+          ? await prisma.appointment.update({ where: { id: open.id }, data: { requestedSlot: slot, notes: text(args.notes) ?? open.notes } })
           : await prisma.appointment.create({
               data: { tenantId, clientId: client.id, leadId: lead.id, listingId: listing.id, requestedSlot: slot, notes: text(args.notes) },
             });
@@ -369,16 +430,114 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
           data: { listingId: listing.id, productInterest: listing.title, stage: "READY_TO_BUY", lastContactAt: new Date() },
         });
 
-        if (!recent || recent.requestedSlot !== slot) {
+        if (dateTime) {
+          const booked = await scheduling.book(tenantId, appointment.id, dateTime);
+          if (booked.ok) {
+            const moved = open?.status === "CONFIRMED";
+            await notify(
+              `📅 ${moved ? "Cita movida" : "Cita agendada"} en el calendario: ${what} de ${listing.title} (${listing.code}) con ${clientLabel(client)} el ${booked.label}${booked.advisor ? `. La atiende ${booked.advisor}` : ""}.`,
+            );
+            return JSON.stringify({
+              ok: true,
+              estado: "agendada",
+              fechaHora: booked.label,
+              ...(booked.advisor ? { asesor: booked.advisor } : {}),
+              mensaje: `Confírmale que quedó agendada para el ${booked.label}${booked.advisor ? ` con ${booked.advisor.split(" ")[0]}` : ""}. El asesor le envía la ubicación exacta antes de la cita.`,
+            });
+          }
+          if (booked.reason !== "sin_calendario" && booked.reason !== "error_calendario") {
+            return JSON.stringify({
+              ok: false,
+              estado: "no_agendada",
+              motivo: booked.reason,
+              alternativas: booked.alternatives.map((a) => ({ dateTime: a.start, texto: a.label })),
+              mensaje: "Ese horario no está disponible. Ofrécele las alternativas y, cuando elija, vuelve a llamar request_visit con ese dateTime.",
+            });
+          }
+          if (booked.reason === "error_calendario") console.warn("[brokerage] no se pudo agendar en el calendario:", booked.detail);
+        }
+
+        if (!open || open.requestedSlot !== slot) {
           await notify(
-            `📅 Solicitud de ${listing.kind === "VEHICLE" ? "prueba de manejo" : "visita"}: ${clientLabel(client)} quiere ver ${listing.title} (${listing.code}) el ${slot}. Confirmar hora y lugar.`,
+            `📅 Solicitud de ${what}: ${clientLabel(client)} quiere ver ${listing.title} (${listing.code}) el ${slot}. Confirmar hora y lugar.`,
           );
         }
         return JSON.stringify({
           ok: true,
           estado: "solicitada",
-          horario: appointment.requestedSlot,
+          horario: slot,
           mensaje: "Dile al cliente que un asesor le confirma la hora y el lugar. No digas que quedó confirmada.",
+        });
+      },
+    },
+
+    {
+      name: "cancel_visit",
+      description: "Cancela la visita o prueba de manejo que el cliente tiene con un bien, cuando él lo pida. La quita también del calendario.",
+      parameters: {
+        type: "object",
+        properties: {
+          listing: { type: "string", description: "Nombre o código del bien de la cita" },
+          reason: { type: "string", description: "Por qué cancela, si lo dijo" },
+        },
+        required: ["listing"],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const client = await clientOf(tenantId, ctx);
+        if (!client) return JSON.stringify({ error: "no hay un cliente asociado a la conversación" });
+        const listing = await findListing(tenantId, args.listing);
+        if (!listing) return LISTING_NOT_FOUND;
+        const appointment = await prisma.appointment.findFirst({
+          where: { tenantId, clientId: client.id, listingId: listing.id, status: { in: ["REQUESTED", "CONFIRMED"] } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (!appointment) return JSON.stringify({ error: "sin_cita", detalle: "El cliente no tiene una cita abierta con ese bien." });
+        const reason = text(args.reason);
+        await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: { status: "CANCELLED", notes: [appointment.notes, reason ? `Canceló: ${reason}` : "Canceló por WhatsApp"].filter(Boolean).join(" · ") },
+        });
+        await scheduling.syncFromPanel(tenantId, appointment.id);
+        await notify(`❌ ${clientLabel(client)} canceló la cita de ${listing.title} (${listing.code})${reason ? `: ${reason}` : ""}.`);
+        return JSON.stringify({ ok: true, estado: "cancelada", mensaje: "Confírmale que la cita quedó cancelada y ofrécele reagendar cuando quiera." });
+      },
+    },
+
+    {
+      name: "simulate_payment",
+      description:
+        "Simula la cuota mensual aproximada de un crédito para comprar un bien. Úsala siempre que el cliente pregunte cuánto pagaría al mes; no hagas la cuenta tú. El resultado es un estimado, no una aprobación de crédito.",
+      parameters: {
+        type: "object",
+        properties: {
+          price: { type: "number", description: "Precio del bien en pesos, tal como lo devolvió search_listings (ej: 98000000)" },
+          downPayment: { type: "number", description: "Cuota inicial en pesos que dijo el cliente (0 si no tiene)" },
+          annualRatePercent: { type: "number", description: "Tasa efectiva anual en porcentaje (ej: 14.5), la de la información o las reglas del negocio" },
+          months: { type: "number", description: "Plazo en meses (ej: 60)" },
+        },
+        required: ["price", "downPayment", "annualRatePercent", "months"],
+        additionalProperties: false,
+      },
+      async execute(args) {
+        const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+        const result = simulateLoan({
+          price: num(args.price),
+          downPayment: num(args.downPayment),
+          annualRatePercent: num(args.annualRatePercent),
+          months: num(args.months),
+        });
+        if (!result.ok) return JSON.stringify({ error: "datos_invalidos", detalle: result.error });
+        return JSON.stringify({
+          estimado: true,
+          price: Math.round(num(args.price)),
+          downPayment: Math.round(num(args.downPayment)),
+          financedAmount: result.financedAmount,
+          months: num(args.months),
+          annualRatePercent: num(args.annualRatePercent),
+          monthlyPayment: result.monthlyPayment,
+          totalPaid: result.totalPaid,
+          mensaje: "Dile al cliente que es un valor aproximado: la cuota real depende de la entidad, del estudio de crédito y de los seguros. No prometas aprobación.",
         });
       },
     },

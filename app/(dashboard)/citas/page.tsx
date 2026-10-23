@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { CalendarCheck, CalendarClock, Car, Building2, Phone } from "lucide-react";
+import { CalendarCheck, CalendarClock, Car, Building2, ExternalLink, Phone, UserRound } from "lucide-react";
 import { Badge, type BadgeProps } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
@@ -108,6 +108,16 @@ function AppointmentRow({ appointment: a }: { appointment: AppointmentDto }) {
               </span>
             )}
             <span>Pidió: {a.requestedSlot}</span>
+            {a.advisor && (
+              <span className="flex items-center gap-1">
+                <UserRound className="h-3.5 w-3.5" /> La atiende {a.advisor.name}
+              </span>
+            )}
+            {a.calendarEventUrl && (
+              <a href={a.calendarEventUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-wa hover:underline">
+                <ExternalLink className="h-3.5 w-3.5" /> En el calendario
+              </a>
+            )}
             <span>{formatDistanceToNow(new Date(a.createdAt), { locale: es, addSuffix: true })}</span>
           </div>
           {a.notes && <p className="mt-1 text-xs text-muted-foreground">Nota: {a.notes}</p>}

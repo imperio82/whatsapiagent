@@ -81,10 +81,10 @@ export function extractOrderCodes(text: string): string[] {
   return [...text.matchAll(/\b(?:PED|ORD)-\d{3,}\b/g)].map((m) => m[0]);
 }
 
-/** Valores numéricos de las claves de precio o total (priceMajor, totalMajor…) de un JSON. */
+/** Valores numéricos de las claves de precio, total, pago o monto (priceMajor, totalMajor, monthlyPayment…) de un JSON. */
 function collectPrices(value: unknown, into: Set<number>, key = ""): void {
   if (typeof value === "number") {
-    if (/price|total/i.test(key) && value > 0) into.add(value);
+    if (/price|total|payment|amount/i.test(key) && value > 0) into.add(value);
   } else if (Array.isArray(value)) {
     for (const v of value) collectPrices(v, into, key);
   } else if (value && typeof value === "object") {

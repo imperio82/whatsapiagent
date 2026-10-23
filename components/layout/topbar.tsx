@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { Bell, LogOut, Moon, Search, Sun, User } from "lucide-react";
+import { Bell, LogOut, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useHandoffQueue } from "@hooks/use-conversations";
 import { Avatar, AvatarFallback } from "@components/ui/avatar";
 import { Button } from "@components/ui/button";
 import { WhatsAppStatus } from "./whatsapp-status";
+import { toggleSidebar, useSidebarHidden } from "./sidebar-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,7 @@ export function Topbar({ userName, userEmail }: TopbarProps) {
   const { theme, setTheme } = useTheme();
   const { data: handoffs } = useHandoffQueue();
   const pending = handoffs?.length ?? 0;
+  const sidebarHidden = useSidebarHidden();
   const initials = userName
     .split(" ")
     .map((p) => p[0])
@@ -35,6 +37,16 @@ export function Topbar({ userName, userEmail }: TopbarProps) {
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-background/60 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/40">
+      <Button
+        size="icon"
+        variant="ghost"
+        className="hidden md:inline-flex"
+        aria-label={sidebarHidden ? "Mostrar menú" : "Esconder menú"}
+        title={sidebarHidden ? "Mostrar menú" : "Esconder menú"}
+        onClick={toggleSidebar}
+      >
+        {sidebarHidden ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+      </Button>
       <div className="relative flex-1 max-w-md">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input

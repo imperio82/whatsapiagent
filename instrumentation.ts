@@ -10,5 +10,9 @@ export async function register(): Promise<void> {
       "@modules/whatsapp/infrastructure/provider-bootstrap"
     );
     ensureWhatsAppWired();
+
+    // Felicitaciones automáticas y sincronización de hojas y bases externas
+    const { startScheduler } = await import("@modules/jobs/infrastructure/scheduler");
+    startScheduler();
   }
 }

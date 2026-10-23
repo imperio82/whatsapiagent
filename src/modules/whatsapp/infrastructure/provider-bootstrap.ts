@@ -1,7 +1,9 @@
 import { IngestInboundMessageUseCase } from "@modules/conversations/application/ingest-inbound-message.use-case";
 import { RespondToMessageUseCase } from "@modules/ai/application/respond-to-message.use-case";
-import { getAIProvider } from "@modules/ai/infrastructure/provider-factory";
+import { AdvisorAssistantUseCase, resolveAdvisor } from "@modules/ai/application/advisor-assistant.use-case";
+import { getAIProvider, getFastAIProvider } from "@modules/ai/infrastructure/provider-factory";
 import { getWhatsAppProvider, isBaileys } from "./provider-factory";
+import { createReplyDebouncer } from "./reply-debouncer";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -10,8 +12,10 @@ declare global {
 
 /**
  * Pipeline de inbound:
+ *   0. Si escribe un asesor del negocio, lo atiende el asistente del asesor (no es un cliente)
  *   1. Persistir el mensaje (IngestInboundMessage)
  *   2. Si el tenant tiene IA activa y hay OPENAI_API_KEY, responder con IA
+ *      después de unos segundos sin mensajes nuevos (ver reply-debouncer.ts)
  *
  * Idempotente — registra handlers una sola vez por proceso.
  * Además rehidrata todas las sesiones Baileys persistidas en disco.
@@ -37,20 +41,42 @@ export function ensureWhatsAppWired(): void {
     }
   }
 
+  let advisorAssistant: AdvisorAssistantUseCase | null = null;
+  function getAdvisorAssistant(): AdvisorAssistantUseCase | null {
+    if (advisorAssistant) return advisorAssistant;
+    if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) return null;
+    try {
+      advisorAssistant = new AdvisorAssistantUseCase(getFastAIProvider(), wpp);
+      return advisorAssistant;
+    } catch (err) {
+      console.warn("[ai] no se pudo inicializar el asistente del asesor:", err);
+      return null;
+    }
+  }
+
+  // Espera unos segundos para agrupar mensajes seguidos y responder una sola vez
+  const debouncer = createReplyDebouncer(async (input) => {
+    await getRespond()?.execute(input);
+  });
+
   wpp.onInbound(async (msg) => {
     try {
+      // Sin IA configurada, el mensaje del asesor se guarda como el de cualquier contacto
+      const assistant = getAdvisorAssistant();
+      const advisor = assistant ? await resolveAdvisor(msg.tenantId, msg.from) : null;
+      if (assistant && advisor) {
+        // No se espera: el webhook debe responder rápido; los mensajes del asesor se atienden en orden
+        void assistant.handle(advisor, msg);
+        return;
+      }
+
       const { conversationId, isMessageNew } = await ingest.execute(msg);
       if (!isMessageNew) {
         // Baileys reentregó un mensaje que ya procesamos. No respondemos
         // de nuevo: evita que la IA mande dos respuestas al cliente.
         return;
       }
-      const responder = getRespond();
-      if (responder) {
-        responder
-          .execute({ tenantId: msg.tenantId, conversationId })
-          .catch((err) => console.error("[ai respond] error:", err));
-      }
+      if (getRespond()) debouncer.schedule(msg.tenantId, conversationId);
     } catch (err) {
       console.error("[whatsapp ingest] error:", err);
     }

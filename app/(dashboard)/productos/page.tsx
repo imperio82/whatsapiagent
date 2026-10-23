@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import Link from "next/link";
+import { Plus, Search, Upload } from "lucide-react";
 import { Button } from "@components/ui/button";
 import { Input } from "@components/ui/input";
 import {
@@ -31,6 +32,12 @@ export default function ProductsPage(): React.ReactElement {
             Cargá tu catálogo. La IA usa esta información para responder por WhatsApp.
           </p>
         </div>
+        <div className="flex gap-2">
+        <Button asChild variant="outline">
+          <Link href="/configuracion/datos?destino=productos">
+            <Upload className="h-4 w-4" /> Importar
+          </Link>
+        </Button>
         <Dialog open={creating} onOpenChange={setCreating}>
           <DialogTrigger asChild>
             <Button>
@@ -54,6 +61,7 @@ export default function ProductsPage(): React.ReactElement {
             />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

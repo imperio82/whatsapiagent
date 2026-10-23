@@ -17,35 +17,42 @@ datasource db {
 // ============================================================================
 
 model Tenant {
-  id               String         @id @default(cuid())
-  slug             String         @unique
-  name             String
-  industry         String?
-  address          String?
-  taxId            String?
-  description      String?
-  status           TenantStatus   @default(ACTIVE)
-  aiAutoReply      Boolean        @default(false)
-  aiAgentName      String?
+  id                String         @id @default(cuid())
+  slug              String         @unique
+  name              String
+  industry          String?
+  address           String?
+  taxId             String?
+  description       String?
+  status            TenantStatus   @default(ACTIVE)
+  aiAutoReply       Boolean        @default(false)
+  aiAgentName       String?
   // Tipo de agente: tienda (catálogo y pedidos) o intermediación (inventario de bienes, calificación y citas)
-  agentProfile     AgentProfile   @default(RETAIL)
+  agentProfile      AgentProfile   @default(RETAIL)
   // Número (solo dígitos, con indicativo) al que la IA avisa compradores calientes, ofertas, citas y bienes nuevos
-  ownerNotifyPhone String?
+  ownerNotifyPhone  String?
   // Cuándo se cargaron las reglas por defecto; si el negocio las borra todas, no vuelven a aparecer
-  aiRulesSeededAt  DateTime?
+  aiRulesSeededAt   DateTime?
   // Coincidencias inventario ↔ compradores: el asesor aprueba cada mensaje (APPROVAL) o salen solos (AUTO)
-  matchAlertMode   MatchAlertMode @default(APPROVAL)
+  matchAlertMode    MatchAlertMode @default(APPROVAL)
+  // Asistente del asesor: los mensajes que llegan desde el WhatsApp de un asesor (o del número de avisos) los atiende
+  // un asistente interno (agenda, compradores, inventario) en vez del agente de clientes
+  advisorAssistant  Boolean        @default(true)
+  // Felicitaciones de cumpleaños y fechas especiales: mismo esquema que las coincidencias
+  greetingMode      MatchAlertMode @default(APPROVAL)
+  // Plantillas propias por tipo de fecha { BIRTHDAY, BIRTHDAY_OTHER, ANNIVERSARY, CUSTOM }; si falta, se usa la de fábrica
+  greetingTemplates Json?
   // Contexto que usa el agente de IA para responder (texto libre que escribe el negocio)
-  businessHours    String? // horario de atención
-  deliveryInfo     String? // envíos, cobertura, costos y tiempos
-  paymentInfo      String? // medios de pago
-  faq              String? // preguntas frecuentes, políticas de cambios y garantías
+  businessHours     String? // horario de atención
+  deliveryInfo      String? // envíos, cobertura, costos y tiempos
+  paymentInfo       String? // medios de pago
+  faq               String? // preguntas frecuentes, políticas de cambios y garantías
   // Consecutivo de pedidos (se incrementa dentro de la transacción)
-  orderSeq         Int            @default(0)
+  orderSeq          Int            @default(0)
   // Consecutivo de bienes del inventario (INV-0001)
-  listingSeq       Int            @default(0)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  listingSeq        Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   memberships     Membership[]
   roles           Role[]
@@ -60,6 +67,12 @@ model Tenant {
   listings        Listing[]
   appointments    Appointment[]
   listingMatches  ListingMatch[]
+  integrations    Integration[]
+  integrationApps IntegrationApp[]
+  dataSources     DataSource[]
+  clientDates     ClientDate[]
+  clientRelations ClientRelation[]
+  greetings       Greeting[]
 
   @@map("tenants")
 }
@@ -91,25 +104,30 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  memberships Membership[]
+  memberships          Membership[]
+  integrations         Integration[]
+  assignedAppointments Appointment[] @relation("AssignedAppointments")
 
   @@map("users")
 }
 
 // Relación N:M User<->Tenant con rol(es) por tenant
 model Membership {
-  id        String           @id @default(cuid())
-  userId    String
-  tenantId  String
-  status    MembershipStatus @default(ACTIVE)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id            String           @id @default(cuid())
+  userId        String
+  tenantId      String
+  status        MembershipStatus @default(ACTIVE)
+  // WhatsApp del asesor (solo dígitos, con indicativo): desde ese número habla con el asistente del asesor
+  whatsappPhone String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roles  MembershipRole[]
 
   @@unique([userId, tenantId])
+  @@unique([tenantId, whatsappPhone])
   @@index([tenantId])
   @@map("memberships")
 }
@@ -229,11 +247,18 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  leads         Lead[]
-  orders        Order[]
-  conversations Conversation[]
-  appointments  Appointment[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leads           Lead[]
+  orders          Order[]
+  conversations   Conversation[]
+  appointments    Appointment[]
+  // Fechas especiales (suyas o de su gente), su red de contactos y las felicitaciones enviadas
+  dates           ClientDate[]
+  relations       ClientRelation[] @relation("ClientRelations")
+  relatedTo       ClientRelation[] @relation("ClientRelatedTo")
+  greetings       Greeting[]
+  // El cliente pidió no recibir felicitaciones ni mensajes de fechas especiales
+  greetingsOptOut Boolean          @default(false)
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -594,6 +619,8 @@ model Listing {
   ownerPhone   String?
   exactAddress String?
   privateNotes String?
+  // Id del bien en la fuente externa (Excel, Google Sheets, base de datos) para actualizarlo al sincronizar
+  externalId   String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -603,6 +630,7 @@ model Listing {
   matches      ListingMatch[]
 
   @@unique([tenantId, code])
+  @@unique([tenantId, externalId])
   @@index([tenantId, status])
   @@map("listings")
 }
@@ -628,22 +656,33 @@ enum ListingStatus {
 
 // Visitas y pruebas de manejo que pide el comprador; un asesor confirma la hora
 model Appointment {
-  id            String            @id @default(cuid())
-  tenantId      String
-  clientId      String?
-  leadId        String?
-  listingId     String?
-  requestedSlot String // lo que pidió el cliente: "jueves en la mañana"
-  scheduledAt   DateTime? // la hora que confirma el asesor
-  status        AppointmentStatus @default(REQUESTED)
-  notes         String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id                    String            @id @default(cuid())
+  tenantId              String
+  clientId              String?
+  leadId                String?
+  listingId             String?
+  requestedSlot         String // lo que pidió el cliente: "jueves en la mañana"
+  scheduledAt           DateTime? // la hora que confirma el asesor (o que agenda la IA si hay calendario conectado)
+  durationMin           Int               @default(60)
+  status                AppointmentStatus @default(REQUESTED)
+  notes                 String?
+  // Evento en el calendario externo (Google Calendar u otro proveedor)
+  calendarProvider      String?
+  calendarEventId       String?
+  calendarEventUrl      String?
+  // Calendario donde quedó el evento (el del negocio o el de un asesor)
+  calendarIntegrationId String?
+  // Asesor que atiende la cita (el dueño del calendario donde se agendó, o el que asigne el panel)
+  assignedUserId        String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client  Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  lead    Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  listing Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  tenant              Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calendarIntegration Integration? @relation(fields: [calendarIntegrationId], references: [id], onDelete: SetNull)
+  assignedUser        User?        @relation("AssignedAppointments", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  client              Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  lead                Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  listing             Listing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
   @@map("appointments")
@@ -687,4 +726,191 @@ enum MatchStatus {
   SENT
   DISMISSED
   FAILED
+}
+
+// ============================================================================
+// INTEGRACIONES (calendario, hojas de cálculo…): una conexión por proveedor y negocio.
+// Los agentes no conocen el proveedor: usan los puertos del módulo integrations.
+// ============================================================================
+
+model Integration {
+  id              String              @id @default(cuid())
+  tenantId        String
+  provider        IntegrationProvider
+  // De quién es la conexión: "business" (la del negocio: calendario compartido y hojas de cálculo)
+  // o "user:<userId>" (el calendario propio de un asesor). Texto y no null para que la llave única funcione.
+  ownerKey        String              @default("business")
+  // Asesor dueño de la conexión; null si es la del negocio
+  userId          String?
+  status          IntegrationStatus   @default(CONNECTED)
+  accountEmail    String?
+  scopes          String[]
+  accessTokenEnc  String? // cifrado con SECRETS_ENCRYPTION_KEY
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  // Google: { calendarId, timeZone, workDays, dayStart, dayEnd, slotMinutes, minNoticeHours, acceptsVisits }
+  settings        Json?
+  lastError       String?
+  connectedBy     String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@unique([tenantId, provider, ownerKey])
+  @@index([tenantId, provider])
+  @@map("integrations")
+}
+
+// Credenciales OAuth propias de un negocio (su propio proyecto de Google Cloud). Si no hay, se usan
+// las de la plataforma (variables de entorno). El secreto va cifrado.
+model IntegrationApp {
+  id              String              @id @default(cuid())
+  tenantId        String
+  provider        IntegrationProvider
+  clientId        String
+  clientSecretEnc String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@map("integration_apps")
+}
+
+enum IntegrationProvider {
+  GOOGLE
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  ERROR // el token venció o se revocó: hay que reconectar
+  DISCONNECTED
+}
+
+// Fuentes de datos que alimentan productos, inventario o clientes: un archivo subido una vez,
+// una hoja de Google o una base de datos externa que se sincroniza cada cierto tiempo.
+model DataSource {
+  id               String         @id @default(cuid())
+  tenantId         String
+  name             String
+  type             DataSourceType
+  target           ImportTarget
+  // FILE: { fileName } · GOOGLE_SHEET: { spreadsheetId, sheetName } · POSTGRES/MYSQL: { table }
+  config           Json
+  secretEnc        String? // URL de conexión a la base externa, cifrada
+  mapping          Json // { campoDestino: "Columna de la fuente" }
+  syncEveryMinutes Int? // null = solo manual
+  isActive         Boolean        @default(true)
+  lastSyncAt       DateTime?
+  lastStatus       SyncStatus?
+  lastResult       Json? // { created, updated, skipped, errors: [...] }
+  lastError        String?
+  createdBy        String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("data_sources")
+}
+
+enum DataSourceType {
+  FILE
+  GOOGLE_SHEET
+  POSTGRES
+  MYSQL
+}
+
+enum ImportTarget {
+  PRODUCTS
+  LISTINGS
+  CLIENTS
+}
+
+enum SyncStatus {
+  OK
+  PARTIAL // algunas filas no se pudieron importar
+  ERROR
+}
+
+// ============================================================================
+// FECHAS ESPECIALES, RED DE CONTACTOS Y FELICITACIONES
+// ============================================================================
+
+model ClientDate {
+  id         String         @id @default(cuid())
+  tenantId   String
+  clientId   String
+  kind       ClientDateKind
+  label      String? // "Aniversario de bodas", "Compró su apartamento"
+  // Si la fecha es de otra persona de su círculo: "María (esposa)". El mensaje le llega al cliente.
+  personName String?
+  month      Int
+  day        Int
+  year       Int?
+  // Mensaje propio para esta fecha; si no hay, se usa la plantilla del negocio
+  message    String?
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  greetings Greeting[]
+
+  @@index([tenantId, month, day])
+  @@index([clientId])
+  @@map("client_dates")
+}
+
+enum ClientDateKind {
+  BIRTHDAY
+  ANNIVERSARY
+  CUSTOM
+}
+
+// Red de contactos: quién refirió a quién, familiares, socios… entre clientes del negocio.
+model ClientRelation {
+  id              String   @id @default(cuid())
+  tenantId        String
+  clientId        String
+  relatedClientId String
+  label           String // cómo se relaciona el segundo con el primero: "Esposa", "Lo refirió", "Socio"
+  createdAt       DateTime @default(now())
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client  Client @relation("ClientRelations", fields: [clientId], references: [id], onDelete: Cascade)
+  related Client @relation("ClientRelatedTo", fields: [relatedClientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, relatedClientId])
+  @@index([tenantId])
+  @@map("client_relations")
+}
+
+model Greeting {
+  id           String      @id @default(cuid())
+  tenantId     String
+  clientId     String
+  clientDateId String
+  occursOn     DateTime    @db.Date
+  message      String
+  status       MatchStatus @default(PENDING)
+  error        String?
+  decidedBy    String?
+  sentAt       DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client     Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientDate ClientDate @relation(fields: [clientDateId], references: [id], onDelete: Cascade)
+
+  @@unique([clientDateId, occursOn])
+  @@index([tenantId, status])
+  @@map("greetings")
 }

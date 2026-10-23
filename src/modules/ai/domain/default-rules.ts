@@ -85,6 +85,14 @@ const BROKERAGE_RULES: DefaultRule[] = [
       "modelo, año y kilometraje, y dile que un asesor lo evalúa.",
   },
   {
+    systemKey: "brokerage.financing",
+    category: "POLICY",
+    title: "Simulación de crédito",
+    content:
+      "Las cuotas que simules son solo un estimado. Usa la tasa de referencia que el negocio ponga en Formas de pago y financiación; " +
+      "si no hay tasa, no simules y di que un asesor le hace la simulación. Nunca prometas que el crédito se aprueba.",
+  },
+  {
     systemKey: "brokerage.visits",
     category: "POLICY",
     title: "Horarios de visitas y pruebas de manejo",
