@@ -6,13 +6,14 @@ import {
   ToolMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
+import type { StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
 import type { AITool, ChatMessage } from "../../domain/ports/ai-provider";
 import { verifyReply } from "../../domain/reply-verifier";
 import { COMMON_RULES } from "../system-prompt";
 import { decideVoiceReply, type VoiceDecision, type VoicePolicy } from "@modules/voice/domain/voice-policy";
 import { createChatModel } from "./chat-model";
-import { toLangChainTools } from "./lc-tools";
+import { normalizeToolArgs, toLangChainTools, toolFields } from "./lc-tools";
 import { GRAPH_PROFILES, type GraphProfile } from "./profiles";
 
 /**
@@ -107,6 +108,23 @@ const routerSchema = (intents: readonly [string, ...string[]], voiceRules: boole
     ? base.extend({ voz: z.boolean().describe("true si, según las reglas de voz, este turno se responde con nota de voz") })
     : base;
 };
+
+/**
+ * Un error de la herramienta (por ejemplo, el modelo mandó un campo que no existe) vuelve al modelo
+ * como resultado, con los campos válidos, para que corrija la llamada: no tumba la respuesta al cliente.
+ */
+async function invokeTool(t: StructuredToolInterface, name: string, args: Record<string, unknown>): Promise<string> {
+  try {
+    return String(await t.invoke(normalizeToolArgs(t, args)));
+  } catch (err) {
+    console.warn(`[ai graph] la herramienta ${name} falló con ${JSON.stringify(args)}:`, err);
+    const fields = toolFields(t);
+    return JSON.stringify({
+      error: `No se pudo ejecutar ${name}: ${err instanceof Error ? err.message : String(err)}`,
+      ...(fields.length > 0 ? { camposValidos: fields, nota: "Usa solo estos campos, con estos nombres exactos, y vuelve a intentarlo." } : {}),
+    });
+  }
+}
 
 /** Las herramientas que entregan la conversación a una persona lo indican con "handoff": true. */
 function asksForHandoff(output: string): boolean {
@@ -253,7 +271,7 @@ export async function runSalesGraph(input: {
         const output = previousOrder
           ? JSON.stringify({ ...JSON.parse(previousOrder), nota: "Este pedido ya se creó en este turno; no se creó otro." })
           : t && spec.tools.includes(call.name)
-            ? String(await t.invoke(call.args))
+            ? await invokeTool(t, call.name, call.args)
             : JSON.stringify({ error: `herramienta no disponible para ${name}: ${call.name}` });
         usage.toolCalls += 1;
         outputs.push(output);
