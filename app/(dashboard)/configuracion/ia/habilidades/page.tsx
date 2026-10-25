@@ -61,7 +61,7 @@ export default function AgentSkillsPage(): React.ReactElement {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Link href="/configuracion/ia" className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-3 w-3" /> Asistente con IA
+            <ArrowLeft className="h-3 w-3" /> Mi agente
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">Habilidades del agente</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">

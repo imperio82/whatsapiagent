@@ -22,6 +22,10 @@ export interface SystemPromptInput {
   paymentInfo: string | null;
   faq: string | null;
   agentName?: string;
+  /** Cargo o rol con el que se presenta (ej: "asesora comercial") */
+  agentRole?: string | null;
+  /** Personalidad que le da el negocio en "Entrenar mi agente" */
+  personality?: string | null;
   /** Nombre del cliente si lo conocemos (no los genéricos "Cliente 1234"). */
   clientName?: string | null;
   /** Lo que ya se sabe del cliente: ficha, memoria y pedidos anteriores (ver client-memory.ts). */
@@ -47,10 +51,20 @@ export function buildBusinessContext(input: SystemPromptInput): string {
   });
   const brokerage = input.profile === "BROKERAGE";
 
-  return `Eres ${name}. Atiendes clientes por WhatsApp en nombre de "${input.businessName}"${
+  const role = input.agentRole?.trim();
+  const personality = input.personality?.trim();
+
+  return `Eres ${name}${role ? `, ${role}` : ""}. Atiendes clientes por WhatsApp en nombre de "${input.businessName}"${
     input.industry ? ` (${input.industry})` : ""
   }, un negocio en Colombia. Hoy es ${now} (hora de Colombia).${
     input.clientName ? `\nEstás hablando con ${input.clientName}.` : ""
+  }${
+    personality
+      ? `
+
+TU PERSONALIDAD (define tu tono y tu forma de hablar; las REGLAS DEL NEGOCIO, el trato tú o usted y las reglas generales siempre mandan sobre ella):
+${personality}`
+      : ""
   }
 
 INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté aquí):${section("Descripción", input.description)}${section("Dirección", input.address)}${section("Horario de atención", input.businessHours)}${section(brokerage ? "Cobertura y zonas" : "Envíos y entregas", input.deliveryInfo)}${section(brokerage ? "Formas de pago y financiación" : "Medios de pago", input.paymentInfo)}${section("Preguntas frecuentes y políticas", input.faq)}${formatBusinessRules(input.rules ?? [])}${

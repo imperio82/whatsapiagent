@@ -247,6 +247,8 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       paymentInfo: tenant.paymentInfo,
       faq: tenant.faq,
       agentName: tenant.aiAgentName ?? undefined,
+      agentRole: tenant.aiAgentRole,
+      personality: tenant.aiPersonality,
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
       clientProfile: [clientProfile, qualification].filter(Boolean).join("\n\n") || null,
     };

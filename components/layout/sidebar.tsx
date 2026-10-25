@@ -82,7 +82,7 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
     section: "Administración",
     items: [
       { href: "/configuracion/whatsapp", label: "WhatsApp", icon: MessageSquare },
-      { href: "/configuracion/ia", label: "IA", icon: Sparkles, badge: "Beta" },
+      { href: "/configuracion/ia", label: "Mi agente", icon: Sparkles, badge: "Beta" },
       { href: "/configuracion/ia/habilidades", label: "Habilidades del agente", icon: ListChecks },
       { href: "/configuracion/ia/voz", label: "Voz del agente", icon: AudioLines },
       { href: "/configuracion/simulador", label: "Simulador del agente", icon: FlaskConical },

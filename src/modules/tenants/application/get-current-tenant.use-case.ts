@@ -16,6 +16,8 @@ export interface CurrentTenantDto {
   aiAgentName?: string | null;
   /** null: usa la espera por defecto del servidor */
   aiReplyDelaySec: number | null;
+  aiAgentRole: string | null;
+  aiPersonality: string | null;
   businessHours: string | null;
   deliveryInfo: string | null;
   paymentInfo: string | null;
@@ -44,6 +46,8 @@ export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
     aiAutoReply: tenant.aiAutoReply,
     aiAgentName: tenant.aiAgentName,
     aiReplyDelaySec: tenant.aiReplyDelaySec,
+    aiAgentRole: tenant.aiAgentRole,
+    aiPersonality: tenant.aiPersonality,
     businessHours: tenant.businessHours,
     deliveryInfo: tenant.deliveryInfo,
     paymentInfo: tenant.paymentInfo,

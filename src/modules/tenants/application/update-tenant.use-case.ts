@@ -15,6 +15,8 @@ export const updateTenantSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   aiAutoReply: z.boolean().optional(),
   aiAgentName: z.string().max(40).nullable().optional(),
+  aiAgentRole: z.string().max(80).nullable().optional(),
+  aiPersonality: z.string().max(1500).nullable().optional(),
   aiReplyDelaySec: z.number().int().min(0).max(MAX_REPLY_DELAY_SEC).nullable().optional(),
   businessHours: z.string().max(500).nullable().optional(),
   deliveryInfo: z.string().max(2000).nullable().optional(),

@@ -29,6 +29,9 @@ model Tenant {
   aiAgentName       String?
   // Segundos que el agente espera sin mensajes nuevos antes de responder (null: AI_REPLY_DELAY_MS del servidor)
   aiReplyDelaySec   Int?
+  // Entrenar mi agente: cargo o rol con el que se presenta y su personalidad (aplica a tienda e intermediación)
+  aiAgentRole       String?
+  aiPersonality     String?
   // Tipo de agente: tienda (catálogo y pedidos) o intermediación (inventario de bienes, calificación y citas)
   agentProfile      AgentProfile   @default(RETAIL)
   // Número (solo dígitos, con indicativo) al que la IA avisa compradores calientes, ofertas, citas y bienes nuevos
