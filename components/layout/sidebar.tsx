@@ -9,7 +9,7 @@ import {
   ChevronDown,
   Boxes,
   CalendarClock,
-  Cake,
+  BellRing,
   Database,
   FlaskConical,
   Plug,
@@ -52,7 +52,7 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
             { href: "/citas", label: "Citas", icon: CalendarClock },
           ]
         : [{ href: "/pedidos", label: "Pedidos", icon: Receipt }]),
-      { href: "/felicitaciones", label: "Felicitaciones", icon: Cake },
+      { href: "/recordatorios", label: "Recordatorios", icon: BellRing },
     ],
   },
   {

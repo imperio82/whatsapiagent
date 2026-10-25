@@ -15,7 +15,7 @@
     "db:seed:demo": "tsx prisma/seed-demo-co.ts",
     "db:seed:intermediacion": "tsx prisma/seed-demo-intermediacion.ts",
     "admin:grant": "tsx scripts/make-admin.ts",
-    "test": "tsx --test src/modules/ai/domain/reply-verifier.test.ts src/modules/ai/infrastructure/graph/lc-tools.test.ts src/modules/ai/domain/financing.test.ts src/modules/whatsapp/infrastructure/reply-debouncer.test.ts src/modules/matching/domain/match.test.ts src/modules/integrations/domain/agenda.test.ts src/modules/integrations/infrastructure/oauth-state.test.ts src/modules/clients/domain/special-dates.test.ts src/modules/ai/domain/advisor-phone.test.ts src/modules/voice/domain/voice-policy.test.ts src/modules/voice/infrastructure/ogg-opus.test.ts",
+    "test": "tsx --test src/modules/ai/domain/reply-verifier.test.ts src/modules/ai/infrastructure/graph/lc-tools.test.ts src/modules/ai/domain/financing.test.ts src/modules/whatsapp/infrastructure/reply-debouncer.test.ts src/modules/matching/domain/match.test.ts src/modules/integrations/domain/agenda.test.ts src/modules/integrations/infrastructure/oauth-state.test.ts src/modules/clients/domain/special-dates.test.ts src/modules/reminders/domain/reminders.test.ts src/modules/ai/domain/advisor-phone.test.ts src/modules/voice/domain/voice-policy.test.ts src/modules/voice/infrastructure/ogg-opus.test.ts",
     "postinstall": "prisma generate",
     "start:prod": "prisma migrate deploy && next start"
   },

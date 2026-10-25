@@ -1,11 +1,13 @@
 import { getWhatsAppProvider } from "@modules/whatsapp/infrastructure/provider-factory";
 import { GreetingsService } from "@modules/greetings/application/greetings.service";
+import { RemindersService } from "@modules/reminders/application/reminders.service";
 import { DataSourcesService } from "@modules/data-import/application/data-sources.service";
 import { MatchingService } from "@modules/matching/application/matching.service";
 
 /**
  * Tareas periódicas dentro del mismo servidor (Railway corre una sola instancia):
  * - Felicitaciones: preparar las de hoy y mañana, enviar las automáticas y vencer las viejas.
+ * - Recordatorios: citas, seguimiento a clientes que no responden y recordatorios libres.
  * - Fuentes de datos: sincronizar las hojas y bases externas a las que ya les toca.
  *
  * Cada tarea es idempotente (restricciones únicas y "reservas" en la base), así que si algún día
@@ -27,6 +29,7 @@ export function startScheduler(): void {
   const whatsapp = getWhatsAppProvider();
   const jobs: Job[] = [
     { name: "felicitaciones", run: () => new GreetingsService(whatsapp).run() },
+    { name: "recordatorios", run: () => new RemindersService(whatsapp).run() },
     { name: "fuentes de datos", run: () => new DataSourcesService(new MatchingService(whatsapp)).syncDue() },
   ];
 

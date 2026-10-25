@@ -17,50 +17,60 @@ datasource db {
 // ============================================================================
 
 model Tenant {
-  id                String         @id @default(cuid())
-  slug              String         @unique
-  name              String
-  industry          String?
-  address           String?
-  taxId             String?
-  description       String?
-  status            TenantStatus   @default(ACTIVE)
-  aiAutoReply       Boolean        @default(false)
-  aiAgentName       String?
+  id                       String         @id @default(cuid())
+  slug                     String         @unique
+  name                     String
+  industry                 String?
+  address                  String?
+  taxId                    String?
+  description              String?
+  status                   TenantStatus   @default(ACTIVE)
+  aiAutoReply              Boolean        @default(false)
+  aiAgentName              String?
   // Segundos que el agente espera sin mensajes nuevos antes de responder (null: AI_REPLY_DELAY_MS del servidor)
-  aiReplyDelaySec   Int?
+  aiReplyDelaySec          Int?
   // Entrenar mi agente: cargo o rol con el que se presenta y su personalidad (aplica a tienda e intermediación)
-  aiAgentRole       String?
-  aiPersonality     String?
+  aiAgentRole              String?
+  aiPersonality            String?
   // Tipo de agente: tienda (catálogo y pedidos) o intermediación (inventario de bienes, calificación y citas)
-  agentProfile      AgentProfile   @default(RETAIL)
+  agentProfile             AgentProfile   @default(RETAIL)
   // Número (solo dígitos, con indicativo) al que la IA avisa compradores calientes, ofertas, citas y bienes nuevos
-  ownerNotifyPhone  String?
+  ownerNotifyPhone         String?
   // Cuándo se cargaron las reglas por defecto; si el negocio las borra todas, no vuelven a aparecer
-  aiRulesSeededAt   DateTime?
+  aiRulesSeededAt          DateTime?
   // Coincidencias inventario ↔ compradores: el asesor aprueba cada mensaje (APPROVAL) o salen solos (AUTO)
-  matchAlertMode    MatchAlertMode @default(APPROVAL)
+  matchAlertMode           MatchAlertMode @default(APPROVAL)
   // Asistente del asesor: los mensajes que llegan desde el WhatsApp de un asesor (o del número de avisos) los atiende
   // un asistente interno (agenda, compradores, inventario) en vez del agente de clientes
-  advisorAssistant  Boolean        @default(true)
+  advisorAssistant         Boolean        @default(true)
   // Felicitaciones de cumpleaños y fechas especiales: mismo esquema que las coincidencias
-  greetingMode      MatchAlertMode @default(APPROVAL)
+  greetingMode             MatchAlertMode @default(APPROVAL)
   // Plantillas propias por tipo de fecha { BIRTHDAY, BIRTHDAY_OTHER, ANNIVERSARY, CUSTOM }; si falta, se usa la de fábrica
-  greetingTemplates Json?
+  greetingTemplates        Json?
+  // Recordatorios de citas: cuántas horas antes se le escribe al cliente y si sale solo o con aprobación
+  appointmentReminders     Boolean        @default(true)
+  appointmentReminderHours Int            @default(24)
+  appointmentReminderMode  MatchAlertMode @default(APPROVAL)
+  // Seguimiento: si el cliente no responde en estas horas, se le vuelve a escribir (una vez por silencio)
+  followUpEnabled          Boolean        @default(true)
+  followUpHours            Int            @default(20)
+  followUpMode             MatchAlertMode @default(APPROVAL)
+  // Mensajes propios { APPOINTMENT, FOLLOW_UP }; si falta, se usa el de fábrica
+  reminderTemplates        Json?
   // Contexto que usa el agente de IA para responder (texto libre que escribe el negocio)
-  businessHours     String? // horario de atención
-  deliveryInfo      String? // envíos, cobertura, costos y tiempos
-  paymentInfo       String? // medios de pago
-  faq               String? // preguntas frecuentes, políticas de cambios y garantías
+  businessHours            String? // horario de atención
+  deliveryInfo             String? // envíos, cobertura, costos y tiempos
+  paymentInfo              String? // medios de pago
+  faq                      String? // preguntas frecuentes, políticas de cambios y garantías
   // Consecutivo de pedidos (se incrementa dentro de la transacción)
-  orderSeq          Int            @default(0)
+  orderSeq                 Int            @default(0)
   // Consecutivo de bienes del inventario (INV-0001)
-  listingSeq        Int            @default(0)
+  listingSeq               Int            @default(0)
   // Plan contratado y hasta cuándo está pago (null: nunca ha pagado)
-  plan              PlanTier       @default(EMPRENDE)
-  paidUntil         DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  plan                     PlanTier       @default(EMPRENDE)
+  paidUntil                DateTime?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
 
   memberships     Membership[]
   roles           Role[]
@@ -81,6 +91,7 @@ model Tenant {
   clientDates     ClientDate[]
   clientRelations ClientRelation[]
   greetings       Greeting[]
+  reminders       Reminder[]
   billingEntries  BillingEntry[]
   agentVoice      AgentVoice?
   clonedVoices    ClonedVoice[]
@@ -301,6 +312,7 @@ model Client {
   relations       ClientRelation[] @relation("ClientRelations")
   relatedTo       ClientRelation[] @relation("ClientRelatedTo")
   greetings       Greeting[]
+  reminders       Reminder[]
   // El cliente pidió no recibir felicitaciones ni mensajes de fechas especiales
   greetingsOptOut Boolean          @default(false)
 
@@ -727,6 +739,7 @@ model Appointment {
   client              Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
   lead                Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
   listing             Listing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  reminders           Reminder[]
 
   @@index([tenantId, status])
   @@map("appointments")
@@ -957,6 +970,53 @@ model Greeting {
   @@unique([clientDateId, occursOn])
   @@index([tenantId, status])
   @@map("greetings")
+}
+
+// Recordatorios (además de las felicitaciones, que van en Greeting):
+// - APPOINTMENT: se le escribe al cliente antes de su cita para confirmarla.
+// - FOLLOW_UP: el cliente dejó de responder; se le escribe una vez para retomar.
+// - CUSTOM: lo programa el asesor. Con autoSend sale al cliente a la hora; sin él es una tarea del equipo.
+// Igual que las felicitaciones: quedan para aprobar o salen solos según la configuración del negocio.
+model Reminder {
+  id             String       @id @default(cuid())
+  tenantId       String
+  clientId       String
+  kind           ReminderKind
+  dueAt          DateTime
+  message        String
+  // Nota interna para el equipo (lo que hay que hacer, por qué se programó)
+  note           String?
+  // CUSTOM: true = el mensaje sale solo al cliente a la hora; false = tarea para el equipo
+  autoSend       Boolean      @default(false)
+  status         MatchStatus  @default(PENDING)
+  error          String?
+  appointmentId  String?
+  // Hora de la cita cuando se creó el recordatorio: si la cita se mueve, este se descarta y se crea otro
+  appointmentAt  DateTime?
+  conversationId String?
+  // Seguimiento: último mensaje del cliente antes del silencio (un solo seguimiento por silencio)
+  sourceAt       DateTime?
+  createdBy      String?
+  decidedBy      String?
+  notifiedAt     DateTime?
+  sentAt         DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@unique([appointmentId, appointmentAt])
+  @@unique([conversationId, sourceAt])
+  @@index([tenantId, status, dueAt])
+  @@map("reminders")
+}
+
+enum ReminderKind {
+  APPOINTMENT
+  FOLLOW_UP
+  CUSTOM
 }
 
 // ============================================================================
