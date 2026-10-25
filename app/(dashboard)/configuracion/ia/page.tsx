@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   AudioLines,
   Bell,
@@ -23,6 +22,11 @@ import { Card, CardContent } from "@components/ui/card";
 import { Input } from "@components/ui/input";
 import { Label } from "@components/ui/label";
 import { Switch } from "@components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@components/ui/dialog";
+import { AgentSkills } from "@components/features/agent/agent-skills";
+import { AgentVoice } from "@components/features/agent/agent-voice";
+import { BusinessKnowledgeForm } from "@components/features/agent/business-knowledge-form";
+import { TrainAgentForm } from "@components/features/agent/train-agent-form";
 import { useCurrentTenant, useUpdateTenant } from "@hooks/use-tenant";
 
 type Profile = "RETAIL" | "BROKERAGE";
@@ -46,21 +50,51 @@ const REPLY_DELAY_PRESETS = [
   { value: "20", label: "20 s" },
 ] as const;
 
-function SectionLink({
-  href,
+type Section = "entrenar" | "negocio" | "habilidades" | "voz";
+
+/** Qué se abre en el modal de cada tarjeta y cómo de ancho. */
+const SECTION_DIALOG: Record<Section, { title: string; description: string; width: string }> = {
+  entrenar: {
+    title: "Entrenar mi agente",
+    description:
+      "Dale identidad a tu agente: cómo se llama, qué cargo tiene y cómo habla. Aplica a tienda e intermediación desde el siguiente mensaje que llegue.",
+    width: "sm:max-w-3xl",
+  },
+  negocio: {
+    title: "Lo que el agente sabe de tu negocio",
+    description:
+      "El agente responde solo con lo que escribas aquí y con tu catálogo o inventario. Lo que no esté, no lo inventa: lo pasa a una persona.",
+    width: "sm:max-w-3xl",
+  },
+  habilidades: {
+    title: "Habilidades del agente",
+    description:
+      "Cómo trata al cliente, qué puede y no puede hacer, qué preguntas hace y cuándo pasa la conversación a una persona. Los cambios aplican desde el siguiente mensaje.",
+    width: "sm:max-w-5xl",
+  },
+  voz: {
+    title: "Voz del agente",
+    description:
+      "Que escuche las notas de voz de tus clientes y les responda con su propia voz: elige la voz, cómo suena y cuándo habla en vez de escribir.",
+    width: "sm:max-w-4xl",
+  },
+};
+
+function SectionCard({
+  onOpen,
   icon: Icon,
   title,
   text,
   status,
 }: {
-  href: string;
+  onOpen: () => void;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   text: string;
   status?: string;
 }): React.ReactElement {
   return (
-    <Link href={href} className="block">
+    <button type="button" onClick={onOpen} className="block h-full w-full text-left">
       <Card className="h-full transition-colors hover:bg-accent/40">
         <CardContent className="flex h-full items-center gap-3 p-4">
           <div className="rounded-md bg-wa/15 p-2 text-wa">
@@ -76,7 +110,7 @@ function SectionLink({
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </CardContent>
       </Card>
-    </Link>
+    </button>
   );
 }
 
@@ -88,6 +122,7 @@ export default function MyAgentPage(): React.ReactElement {
   const [profile, setProfile] = useState<Profile>("RETAIL");
   const [notifyPhone, setNotifyPhone] = useState("");
   const [matchMode, setMatchMode] = useState<"APPROVAL" | "AUTO">("APPROVAL");
+  const [section, setSection] = useState<Section | null>(null);
 
   useEffect(() => {
     if (tenant) {
@@ -290,8 +325,8 @@ export default function MyAgentPage(): React.ReactElement {
       </Card>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <SectionLink
-          href="/configuracion/ia/entrenar"
+        <SectionCard
+          onOpen={() => setSection("entrenar")}
           icon={GraduationCap}
           title="Entrenar mi agente"
           status={trained ? undefined : "Sin configurar"}
@@ -301,26 +336,41 @@ export default function MyAgentPage(): React.ReactElement {
               : "Dale un nombre, un cargo o rol y una personalidad: cómo saluda, su tono y su forma de hablar."
           }
         />
-        <SectionLink
-          href="/configuracion/ia/negocio"
+        <SectionCard
+          onOpen={() => setSection("negocio")}
           icon={BookOpen}
           title="Lo que el agente sabe de tu negocio"
           status={`${knowledgeCount} de 5`}
           text={`Descripción, horario, ${brokerage ? "cobertura, financiación" : "envíos, medios de pago"} y preguntas frecuentes. Lo que no esté aquí, no lo inventa.`}
         />
-        <SectionLink
-          href="/configuracion/ia/habilidades"
+        <SectionCard
+          onOpen={() => setSection("habilidades")}
           icon={ListChecks}
           title="Habilidades del agente"
           text="Qué puede y no puede decir, preguntas para calificar, cuándo pasar a una persona y el trato."
         />
-        <SectionLink
-          href="/configuracion/ia/voz"
+        <SectionCard
+          onOpen={() => setSection("voz")}
           icon={AudioLines}
           title="Voz del agente"
           text="Que entienda las notas de voz de tus clientes y les responda con voz: elige o clona la voz y decide cuándo habla."
         />
       </div>
+
+      <Dialog open={section !== null} onOpenChange={(open) => !open && setSection(null)}>
+        {section && (
+          <DialogContent className={`max-h-[90vh] overflow-y-auto ${SECTION_DIALOG[section].width}`}>
+            <DialogHeader>
+              <DialogTitle>{SECTION_DIALOG[section].title}</DialogTitle>
+              <DialogDescription>{SECTION_DIALOG[section].description}</DialogDescription>
+            </DialogHeader>
+            {section === "entrenar" && <TrainAgentForm onSaved={() => setSection(null)} />}
+            {section === "negocio" && <BusinessKnowledgeForm onSaved={() => setSection(null)} />}
+            {section === "habilidades" && <AgentSkills embedded />}
+            {section === "voz" && <AgentVoice embedded />}
+          </DialogContent>
+        )}
+      </Dialog>
 
       <Card className="border-dashed">
         <CardContent className="flex gap-3 p-4 text-xs text-muted-foreground">
