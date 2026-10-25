@@ -2,7 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AudioLines, Bell, Bot, Car, ChevronRight, Clock, Info, ListChecks, ShoppingBag, Sparkles, Target } from "lucide-react";
+import {
+  AudioLines,
+  Bell,
+  BookOpen,
+  Bot,
+  Car,
+  ChevronRight,
+  Clock,
+  GraduationCap,
+  Info,
+  ListChecks,
+  ShoppingBag,
+  Sparkles,
+  Target,
+} from "lucide-react";
 import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
@@ -11,74 +25,7 @@ import { Label } from "@components/ui/label";
 import { Switch } from "@components/ui/switch";
 import { useCurrentTenant, useUpdateTenant } from "@hooks/use-tenant";
 
-const TEXTAREA =
-  "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-
-/** Campos de contexto que el agente consulta para responder. */
-const CONTEXT_FIELDS = [
-  {
-    key: "description",
-    label: "Descripción del negocio",
-    rows: 3,
-    placeholder: "Ej: Distribuidora de víveres y aseo en Quinchía. Vendemos al por mayor a tiendas y al detal.",
-    help: "Define el contexto y el tono. Cuanto mejor lo describas, mejores serán las respuestas.",
-  },
-  {
-    key: "businessHours",
-    label: "Horario de atención",
-    rows: 2,
-    placeholder: "Ej: Lunes a sábado de 7:00 a. m. a 6:00 p. m. Domingos y festivos cerrado.",
-    help: "La IA lo usa para decir cuándo se atienden o despachan los pedidos.",
-  },
-  {
-    key: "deliveryInfo",
-    label: "Envíos y entregas",
-    rows: 3,
-    placeholder: "Ej: Domicilio gratis en el casco urbano en compras desde $50.000. Veredas: $5.000. Entregamos el mismo día si pides antes de las 2 p. m.",
-    help: "Cobertura, costos y tiempos. Si no lo escribes, la IA no promete plazos.",
-  },
-  {
-    key: "paymentInfo",
-    label: "Medios de pago",
-    rows: 2,
-    placeholder: "Ej: Efectivo contra entrega, Nequi y Daviplata al 300 000 0000, transferencia Bancolombia.",
-    help: "La IA solo ofrece los medios que escribas aquí.",
-  },
-  {
-    key: "faq",
-    label: "Preguntas frecuentes y políticas",
-    rows: 5,
-    placeholder: "Ej: ¿Hacen cambios? Sí, dentro de los 3 días con la factura.\n¿Venden por unidad? Sí, salvo bebidas, que van por paca.",
-    help: "Cambios, garantías, pedidos mínimos o cualquier respuesta que se repita.",
-  },
-] as const;
-
-type ContextKey = (typeof CONTEXT_FIELDS)[number]["key"];
 type Profile = "RETAIL" | "BROKERAGE";
-
-/** En intermediación los mismos campos se usan para otra cosa: cambian los textos y ejemplos. */
-const BROKERAGE_FIELDS: Partial<Record<ContextKey, { label: string; placeholder: string; help: string }>> = {
-  description: {
-    label: "Descripción del negocio",
-    placeholder: "Ej: Intermediamos la compra, venta y arriendo de vehículos usados e inmuebles en Manizales y el Eje Cafetero.",
-    help: "Qué tipo de bienes manejas y en qué zonas. La IA lo usa para presentarse.",
-  },
-  deliveryInfo: {
-    label: "Cobertura y zonas",
-    placeholder: "Ej: Manizales, Villamaría, Chinchiná y Pereira. Vehículos de cualquier ciudad del país con traspaso.",
-    help: "Dónde tienes bienes y hasta dónde llegas. Los horarios de visitas van en las habilidades del agente.",
-  },
-  paymentInfo: {
-    label: "Formas de pago y financiación",
-    placeholder: "Ej: Contado, crédito con bancos aliados (sujeto a estudio), leasing habitacional y vehículo en parte de pago.",
-    help: "La IA solo menciona lo que escribas aquí. Nunca confirma la aprobación de un crédito.",
-  },
-  faq: {
-    label: "Preguntas frecuentes",
-    placeholder: "Ej: ¿Cobran comisión al comprador? No, la paga el vendedor.\n¿Hacen el traspaso? Sí, lo gestionamos con el comprador.",
-    help: "Respuestas que se repiten. Lo que la IA no debe decir va en las habilidades del agente.",
-  },
-};
 
 const PROFILE_OPTIONS = [
   { value: "RETAIL", icon: ShoppingBag, title: "Tienda", text: "Catálogo de productos, cotización y pedidos." },
@@ -99,38 +46,56 @@ const REPLY_DELAY_PRESETS = [
   { value: "20", label: "20 s" },
 ] as const;
 
-export default function AIConfigPage(): React.ReactElement {
+function SectionLink({
+  href,
+  icon: Icon,
+  title,
+  text,
+  status,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  text: string;
+  status?: string;
+}): React.ReactElement {
+  return (
+    <Link href={href} className="block">
+      <Card className="h-full transition-colors hover:bg-accent/40">
+        <CardContent className="flex h-full items-center gap-3 p-4">
+          <div className="rounded-md bg-wa/15 p-2 text-wa">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold">{title}</span>
+              {status && <Badge variant="secondary">{status}</Badge>}
+            </div>
+            <p className="text-xs text-muted-foreground">{text}</p>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+export default function MyAgentPage(): React.ReactElement {
   const { data: tenant, isLoading } = useCurrentTenant();
   const update = useUpdateTenant();
   const [enabled, setEnabled] = useState(false);
-  const [agentName, setAgentName] = useState("");
   const [replyDelay, setReplyDelay] = useState("");
   const [profile, setProfile] = useState<Profile>("RETAIL");
   const [notifyPhone, setNotifyPhone] = useState("");
   const [matchMode, setMatchMode] = useState<"APPROVAL" | "AUTO">("APPROVAL");
-  const [context, setContext] = useState<Record<ContextKey, string>>({
-    description: "",
-    businessHours: "",
-    deliveryInfo: "",
-    paymentInfo: "",
-    faq: "",
-  });
 
   useEffect(() => {
     if (tenant) {
       setEnabled(tenant.aiAutoReply ?? false);
-      setAgentName(tenant.aiAgentName ?? "");
       setReplyDelay(tenant.aiReplyDelaySec == null ? "" : String(tenant.aiReplyDelaySec));
       setProfile(tenant.agentProfile ?? "RETAIL");
       setNotifyPhone(tenant.ownerNotifyPhone ?? "");
       setMatchMode(tenant.matchAlertMode ?? "APPROVAL");
-      setContext({
-        description: tenant.description ?? "",
-        businessHours: tenant.businessHours ?? "",
-        deliveryInfo: tenant.deliveryInfo ?? "",
-        paymentInfo: tenant.paymentInfo ?? "",
-        faq: tenant.faq ?? "",
-      });
     }
   }, [tenant]);
 
@@ -139,30 +104,28 @@ export default function AIConfigPage(): React.ReactElement {
   }
 
   function save() {
-    const trimmed = Object.fromEntries(
-      CONTEXT_FIELDS.map((f) => [f.key, context[f.key].trim() || null]),
-    ) as Record<ContextKey, string | null>;
     const delay = replyDelay.trim() === "" ? null : Math.min(Math.max(Math.round(Number(replyDelay)), 0), 120);
     update.mutate({
-      aiReplyDelaySec: Number.isFinite(delay) ? delay : null,
       aiAutoReply: enabled,
-      aiAgentName: agentName.trim() || null,
+      aiReplyDelaySec: Number.isFinite(delay) ? delay : null,
       agentProfile: profile,
       ownerNotifyPhone: notifyPhone.trim() || null,
       matchAlertMode: matchMode,
-      ...trimmed,
     });
   }
 
   const brokerage = profile === "BROKERAGE";
-  const fields = CONTEXT_FIELDS.map((f) => ({ ...f, ...(brokerage ? BROKERAGE_FIELDS[f.key] : {}) }));
+  const knowledgeCount = [tenant.description, tenant.businessHours, tenant.deliveryInfo, tenant.paymentInfo, tenant.faq].filter(
+    (v) => v?.trim(),
+  ).length;
+  const trained = !!(tenant.aiAgentName?.trim() || tenant.aiAgentRole?.trim() || tenant.aiPersonality?.trim());
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Asistente con IA</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Mi agente</h1>
         <p className="text-sm text-muted-foreground">
-          La IA responde automáticamente a los chats entrantes consultando tu catálogo.
+          Tu agente responde automáticamente a los chats entrantes consultando tu {brokerage ? "inventario" : "catálogo"}.
           Puedes intervenir en cualquier momento.
         </p>
       </div>
@@ -176,15 +139,13 @@ export default function AIConfigPage(): React.ReactElement {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold">Respuesta automática con IA</span>
-                  <Badge variant={enabled ? "wa" : "secondary"}>
-                    {enabled ? "Activa" : "Desactivada"}
-                  </Badge>
+                  <span className="font-semibold">Respuesta automática</span>
+                  <Badge variant={enabled ? "wa" : "secondary"}>{enabled ? "Activa" : "Desactivada"}</Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {brokerage
-                    ? "Cuando un cliente escribe a tu WhatsApp, la IA responde con tu inventario, califica al comprador, recibe a los vendedores y te avisa cuando hay que actuar."
-                    : "Cuando un cliente escribe a tu WhatsApp, la IA responde con tu catálogo, cotiza y puede crear pedidos."}{" "}
+                    ? "Cuando un cliente escribe a tu WhatsApp, el agente responde con tu inventario, califica al comprador, recibe a los vendedores y te avisa cuando hay que actuar."
+                    : "Cuando un cliente escribe a tu WhatsApp, el agente responde con tu catálogo, cotiza y puede crear pedidos."}{" "}
                   Pasa la conversación a una persona cuando algo excede su alcance.
                 </p>
               </div>
@@ -227,11 +188,6 @@ export default function AIConfigPage(): React.ReactElement {
               “tienen jeans?”, “talla 32”). Más tiempo agrupa mejor; menos tiempo responde más rápido. Máximo 120 s. Vacío
               usa el valor por defecto.
             </p>
-            <div className="flex justify-end">
-              <Button onClick={save} disabled={update.isPending}>
-                <Sparkles className="h-4 w-4" /> Guardar cambios
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -241,7 +197,7 @@ export default function AIConfigPage(): React.ReactElement {
           <div>
             <div className="text-sm font-semibold">Tipo de negocio</div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Define qué hace el asistente y qué habilidades trae por defecto. Al cambiarlo se cargan las del nuevo tipo; las
+              Define qué hace el agente y qué habilidades trae por defecto. Al cambiarlo se cargan las del nuevo tipo; las
               que agregaste tú se conservan.
             </p>
           </div>
@@ -281,10 +237,10 @@ export default function AIConfigPage(): React.ReactElement {
               inputMode="tel"
             />
             <p className="text-xs text-muted-foreground">
-              Con indicativo del país y distinto al número que atiende la IA.{" "}
+              Con indicativo del país y distinto al número que atiende el agente.{" "}
               {brokerage
-                ? "La IA te escribe aquí cuando hay un comprador caliente, una oferta, una solicitud de visita o un bien nuevo para aprobar."
-                : "La IA te escribe aquí cuando necesita que intervengas."}
+                ? "El agente te escribe aquí cuando hay un comprador caliente, una oferta, una solicitud de visita o un bien nuevo para aprobar."
+                : "El agente te escribe aquí cuando necesita que intervengas."}
             </p>
           </div>
 
@@ -333,87 +289,38 @@ export default function AIConfigPage(): React.ReactElement {
         </CardContent>
       </Card>
 
-      <Link href="/configuracion/ia/habilidades" className="block">
-        <Card className="transition-colors hover:bg-accent/40">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-md bg-wa/15 p-2 text-wa">
-              <ListChecks className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <div className="text-sm font-semibold">Habilidades del agente</div>
-              <p className="text-xs text-muted-foreground">
-                Qué puede y no puede decir, preguntas para calificar, cuándo pasar a una persona y el trato. Las editas tú, sin
-                tocar código.
-              </p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </CardContent>
-        </Card>
-      </Link>
-
-      <Link href="/configuracion/ia/voz" className="block">
-        <Card className="transition-colors hover:bg-accent/40">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="rounded-md bg-wa/15 p-2 text-wa">
-              <AudioLines className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <div className="text-sm font-semibold">Voz del agente</div>
-              <p className="text-xs text-muted-foreground">
-                Que entienda las notas de voz de tus clientes y les responda con voz: elige o clona la voz y decide cuándo
-                habla.
-              </p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </CardContent>
-        </Card>
-      </Link>
-
-      <Card>
-        <CardContent className="space-y-4 p-6">
-          <div>
-            <div className="text-sm font-semibold">Lo que la IA sabe de tu negocio</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              La IA responde solo con lo que escribas aquí y con tu {brokerage ? "inventario" : "catálogo"}. Lo que no esté, no lo inventa:
-              lo pasa a una persona.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="agentName">Nombre del asistente (opcional)</Label>
-            <Input
-              id="agentName"
-              value={agentName}
-              onChange={(e) => setAgentName(e.target.value)}
-              placeholder="Ej: Sofía, asistente de ventas"
-            />
-            <p className="text-xs text-muted-foreground">
-              Si lo dejas vacío, la IA se presenta como “el asistente de {tenant.name}”.
-            </p>
-          </div>
-
-          {fields.map((f) => (
-            <div key={f.key} className="space-y-1.5">
-              <Label htmlFor={f.key}>{f.label}</Label>
-              <textarea
-                id={f.key}
-                rows={f.rows}
-                className={TEXTAREA}
-                value={context[f.key]}
-                onChange={(e) => setContext((c) => ({ ...c, [f.key]: e.target.value }))}
-                placeholder={f.placeholder}
-              />
-              <p className="text-xs text-muted-foreground">{f.help}</p>
-            </div>
-          ))}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button onClick={save} disabled={update.isPending}>
-              <Sparkles className="h-4 w-4" /> Guardar cambios
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 md:grid-cols-2">
+        <SectionLink
+          href="/configuracion/ia/entrenar"
+          icon={GraduationCap}
+          title="Entrenar mi agente"
+          status={trained ? undefined : "Sin configurar"}
+          text={
+            tenant.aiAgentName?.trim()
+              ? `${tenant.aiAgentName}${tenant.aiAgentRole?.trim() ? `, ${tenant.aiAgentRole}` : ""}. Cambia su nombre, su cargo y su personalidad.`
+              : "Dale un nombre, un cargo o rol y una personalidad: cómo saluda, su tono y su forma de hablar."
+          }
+        />
+        <SectionLink
+          href="/configuracion/ia/negocio"
+          icon={BookOpen}
+          title="Lo que el agente sabe de tu negocio"
+          status={`${knowledgeCount} de 5`}
+          text={`Descripción, horario, ${brokerage ? "cobertura, financiación" : "envíos, medios de pago"} y preguntas frecuentes. Lo que no esté aquí, no lo inventa.`}
+        />
+        <SectionLink
+          href="/configuracion/ia/habilidades"
+          icon={ListChecks}
+          title="Habilidades del agente"
+          text="Qué puede y no puede decir, preguntas para calificar, cuándo pasar a una persona y el trato."
+        />
+        <SectionLink
+          href="/configuracion/ia/voz"
+          icon={AudioLines}
+          title="Voz del agente"
+          text="Que entienda las notas de voz de tus clientes y les responda con voz: elige o clona la voz y decide cuándo habla."
+        />
+      </div>
 
       <Card className="border-dashed">
         <CardContent className="flex gap-3 p-4 text-xs text-muted-foreground">
