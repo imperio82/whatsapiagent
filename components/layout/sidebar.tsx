@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  AudioLines,
   BarChart3,
   ChevronDown,
   Boxes,
   CalendarClock,
   Cake,
   Database,
+  FlaskConical,
   Plug,
   Target,
   Car,
@@ -22,11 +24,13 @@ import {
   Users,
   Receipt,
   PenSquare,
+  Rocket,
 } from "lucide-react";
 import { cn } from "@lib/utils";
 import { useCurrentTenant } from "@hooks/use-tenant";
 import { TenantSwitcher } from "./tenant-switcher";
 import { useSidebarHidden } from "./sidebar-state";
+import { openQuickStart, useQuickStartHref } from "./quick-start";
 
 interface NavItem {
   href: string;
@@ -79,7 +83,9 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
     items: [
       { href: "/configuracion/whatsapp", label: "WhatsApp", icon: MessageSquare },
       { href: "/configuracion/ia", label: "IA", icon: Sparkles, badge: "Beta" },
-      { href: "/configuracion/ia/reglas", label: "Reglas de la IA", icon: ListChecks },
+      { href: "/configuracion/ia/habilidades", label: "Habilidades del agente", icon: ListChecks },
+      { href: "/configuracion/ia/voz", label: "Voz del agente", icon: AudioLines },
+      { href: "/configuracion/simulador", label: "Simulador del agente", icon: FlaskConical },
       { href: "/configuracion/integraciones", label: "Integraciones", icon: Plug },
       { href: "/configuracion/datos", label: "Fuentes de datos", icon: Database },
       { href: "/configuracion/equipo", label: "Equipo", icon: Users },
@@ -125,6 +131,9 @@ export function Sidebar({
   const [open, setOpen] = useState<string[]>(DEFAULT_OPEN_SECTIONS);
   useEffect(() => setOpen(loadOpenSections()), []);
   const currentSection = nav.find((g) => g.items.some((i) => isActive(pathname, i.href)))?.section;
+  // La guía de inicio rápido resalta la opción de la que está hablando y abre su sección
+  const tourHref = useQuickStartHref();
+  const tourSection = nav.find((g) => g.items.some((i) => i.href === tourHref))?.section;
 
   function toggle(section: string, isOpen: boolean) {
     const next = isOpen ? open.filter((s) => s !== section) : [...open, section];
@@ -150,7 +159,8 @@ export function Sidebar({
 
         <nav className="flex-1 overflow-y-auto px-2 py-4">
           {nav.map((group) => {
-            const isOpen = group.section === currentSection || open.includes(group.section);
+            const isOpen =
+              group.section === currentSection || group.section === tourSection || open.includes(group.section);
             const listId = `nav-${group.section}`;
             return (
               <div key={group.section} className="mb-2">
@@ -178,6 +188,7 @@ export function Sidebar({
                               active
                                 ? "bg-accent text-accent-foreground font-medium"
                                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                              item.href === tourHref && "animate-pulse ring-2 ring-wa",
                             )}
                           >
                             <Icon
@@ -204,10 +215,16 @@ export function Sidebar({
         </nav>
 
         <div className="border-t border-border p-3">
-          <div className="rounded-md bg-accent/40 p-3 text-xs">
-            <div className="mb-1 font-medium">¿Necesitás ayuda?</div>
-            <div className="text-muted-foreground">Configurá tu cuenta de WhatsApp Business en Ajustes.</div>
-          </div>
+          <button
+            type="button"
+            onClick={openQuickStart}
+            className="w-full rounded-md bg-accent/40 p-3 text-left text-xs transition-colors hover:bg-accent"
+          >
+            <div className="mb-1 flex items-center gap-1.5 font-medium">
+              <Rocket className="h-3.5 w-3.5 text-wa" /> ¿Primera vez aquí?
+            </div>
+            <div className="text-muted-foreground">Abre la guía de inicio rápido y te mostramos dónde está todo.</div>
+          </button>
         </div>
       </div>
     </aside>

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { Bell, LogOut, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, User } from "lucide-react";
+import { Bell, CircleHelp, LogOut, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useHandoffQueue } from "@hooks/use-conversations";
 import { Avatar, AvatarFallback } from "@components/ui/avatar";
 import { Button } from "@components/ui/button";
 import { WhatsAppStatus } from "./whatsapp-status";
 import { toggleSidebar, useSidebarHidden } from "./sidebar-state";
+import { openQuickStart } from "./quick-start";
+import { UsageMeter } from "./usage-meter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,7 +58,11 @@ export function Topbar({ userName, userEmail }: TopbarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <UsageMeter />
         <WhatsAppStatus />
+        <Button variant="ghost" size="sm" onClick={openQuickStart} title="Guía de inicio rápido">
+          <CircleHelp className="h-4 w-4" /> <span className="hidden sm:inline">Guía</span>
+        </Button>
         <Button
           size="icon"
           variant="ghost"

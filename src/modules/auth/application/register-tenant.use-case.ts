@@ -5,6 +5,7 @@ import { ensureDefaultRules } from "@modules/ai/infrastructure/ai-rules";
 import { Email } from "../domain/value-objects/email";
 import { Password } from "../domain/value-objects/password";
 import type { PasswordHasher } from "../domain/ports/password-hasher";
+import { TRIAL_DAYS } from "@modules/billing/domain/plans";
 
 export interface RegisterTenantInput {
   businessName: string;
@@ -59,6 +60,8 @@ export class RegisterTenantUseCase implements UseCase<RegisterTenantInput, Regis
           name: input.businessName.trim(),
           industry: input.industry?.trim() || null,
           agentProfile,
+          // Prueba gratis: el administrador ve cuándo vence y registra el primer pago
+          paidUntil: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
         },
       });
 

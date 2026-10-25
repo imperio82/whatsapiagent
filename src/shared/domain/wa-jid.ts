@@ -5,7 +5,19 @@
  * - `<phone>@s.whatsapp.net`: el número real, mostrable como teléfono
  * - `<id>@lid`: identificador interno que WhatsApp usa cuando el cliente
  *   oculta su número o es una cuenta business — NO es un teléfono visible
+ * - `<phone>@sim`: chat de prueba del simulador del panel
  */
+
+/** Chats del simulador del panel: pasan por el flujo real, pero las respuestas no salen por WhatsApp. */
+export const SIMULATED_DOMAIN = "@sim";
+
+export function isSimulatedJid(jid: string): boolean {
+  return jid.endsWith(SIMULATED_DOMAIN);
+}
+
+export function simulatedJid(phoneDigits: string): string {
+  return `${phoneDigits}${SIMULATED_DOMAIN}`;
+}
 
 export function isLidJid(jid: string): boolean {
   return jid.endsWith("@lid");
@@ -32,6 +44,7 @@ export function jidToDisplayPhone(jid: string): string | null {
  */
 export function jidToDisplayLabel(jid: string): string {
   const phone = jidToDisplayPhone(jid);
+  if (phone && isSimulatedJid(jid)) return `${phone} · simulador`;
   if (phone) return phone;
   return "Sin número público (LID)";
 }

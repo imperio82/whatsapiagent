@@ -5,8 +5,10 @@ import pino from "pino";
 import {
   default as makeWASocket,
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
+  type AnyMessageContent,
   type WASocket,
   type ConnectionState as BaileysState,
 } from "@whiskeysockets/baileys";
@@ -18,6 +20,7 @@ import type {
   InboundMessage,
   SendTextParams,
   SendTextResult,
+  SendVoiceParams,
   WhatsAppProvider,
 } from "../../domain/ports/whatsapp-provider";
 
@@ -245,6 +248,25 @@ export class BaileysProvider implements WhatsAppProvider {
   }
 
   async sendText(tenantId: string, params: SendTextParams): Promise<SendTextResult> {
+    return this.deliver(tenantId, params.to, { text: params.text }, `"${params.text.slice(0, 60)}..."`);
+  }
+
+  /** Nota de voz (push-to-talk): WhatsApp la muestra como audio grabado, con su onda. */
+  async sendVoice(tenantId: string, params: SendVoiceParams): Promise<SendTextResult> {
+    return this.deliver(
+      tenantId,
+      params.to,
+      { audio: params.audio, mimetype: "audio/ogg; codecs=opus", ptt: true, seconds: Math.round(params.seconds) },
+      `nota de voz de ${Math.round(params.seconds)} s`,
+    );
+  }
+
+  private async deliver(
+    tenantId: string,
+    to: string,
+    content: AnyMessageContent,
+    label: string,
+  ): Promise<SendTextResult> {
     let session = this.sessions.get(tenantId);
 
     // Si no hay sesión en memoria pero existen credenciales en disco,
@@ -303,7 +325,7 @@ export class BaileysProvider implements WhatsAppProvider {
       session.retries = 0;
     }
 
-    const originalJid = toJid(params.to);
+    const originalJid = toJid(to);
     // Si el destino es un LID, intentamos resolverlo al PN real usando el
     // mapping interno de Baileys. Enviar al PN @s.whatsapp.net es mucho más
     // confiable que enviar a un @lid (donde el server puede no entregar por
@@ -335,11 +357,11 @@ export class BaileysProvider implements WhatsAppProvider {
     }
     const isLid = jid.endsWith("@lid");
     console.log(
-      `[baileys:${tenantId}] enviando a ${jid}${isLid ? " (LID sin resolver — puede no entregar)" : ""}: "${params.text.slice(0, 60)}..."`,
+      `[baileys:${tenantId}] enviando a ${jid}${isLid ? " (LID sin resolver — puede no entregar)" : ""}: ${label}`,
     );
     let result;
     try {
-      result = await session.socket.sendMessage(jid, { text: params.text });
+      result = await session.socket.sendMessage(jid, content);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[baileys:${tenantId}] socket.sendMessage falló:`, err);
@@ -470,13 +492,26 @@ export class BaileysProvider implements WhatsAppProvider {
       // Sin esto, perdemos info necesaria para responder al cliente correcto.
       const fullJid = stripDeviceSuffix(remoteJid);
 
+      // Notas de voz: se descargan aquí porque Baileys no deja bajarlas después
+      const audioMessage = msg.message?.audioMessage;
+      let media: InboundMessage["media"];
+      if (audioMessage) {
+        try {
+          const data = await downloadMediaMessage(msg as Parameters<typeof downloadMediaMessage>[0], "buffer", {});
+          media = { data, mimeType: audioMessage.mimetype ?? "audio/ogg" };
+        } catch (err) {
+          console.warn(`[baileys:${tenantId}] no se pudo descargar la nota de voz:`, err);
+        }
+      }
+
       const inbound: InboundMessage = {
         tenantId,
         from: fullJid,
         toPhoneNumber: self,
         providerMessageId: msg.key.id ?? `${Date.now()}`,
-        type: "text",
+        type: audioMessage ? "audio" : "text",
         text,
+        media,
         contactName: msg.pushName ?? undefined,
         timestamp: new Date((Number(msg.messageTimestamp) || Date.now() / 1000) * 1000),
       };

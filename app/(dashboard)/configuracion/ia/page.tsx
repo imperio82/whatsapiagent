@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, Bot, Car, ChevronRight, Info, ListChecks, ShoppingBag, Sparkles, Target } from "lucide-react";
+import { AudioLines, Bell, Bot, Car, ChevronRight, Clock, Info, ListChecks, ShoppingBag, Sparkles, Target } from "lucide-react";
 import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
@@ -66,7 +66,7 @@ const BROKERAGE_FIELDS: Partial<Record<ContextKey, { label: string; placeholder:
   deliveryInfo: {
     label: "Cobertura y zonas",
     placeholder: "Ej: Manizales, Villamaría, Chinchiná y Pereira. Vehículos de cualquier ciudad del país con traspaso.",
-    help: "Dónde tienes bienes y hasta dónde llegas. Los horarios de visitas van en las reglas.",
+    help: "Dónde tienes bienes y hasta dónde llegas. Los horarios de visitas van en las habilidades del agente.",
   },
   paymentInfo: {
     label: "Formas de pago y financiación",
@@ -76,7 +76,7 @@ const BROKERAGE_FIELDS: Partial<Record<ContextKey, { label: string; placeholder:
   faq: {
     label: "Preguntas frecuentes",
     placeholder: "Ej: ¿Cobran comisión al comprador? No, la paga el vendedor.\n¿Hacen el traspaso? Sí, lo gestionamos con el comprador.",
-    help: "Respuestas que se repiten. Lo que la IA no debe decir va en las reglas.",
+    help: "Respuestas que se repiten. Lo que la IA no debe decir va en las habilidades del agente.",
   },
 };
 
@@ -90,11 +90,21 @@ const PROFILE_OPTIONS = [
   },
 ] as const;
 
+/** Segundos que el agente espera sin mensajes nuevos; "" usa la espera por defecto del servidor. */
+const REPLY_DELAY_PRESETS = [
+  { value: "0", label: "Inmediato" },
+  { value: "3", label: "3 s" },
+  { value: "6", label: "6 s" },
+  { value: "10", label: "10 s" },
+  { value: "20", label: "20 s" },
+] as const;
+
 export default function AIConfigPage(): React.ReactElement {
   const { data: tenant, isLoading } = useCurrentTenant();
   const update = useUpdateTenant();
   const [enabled, setEnabled] = useState(false);
   const [agentName, setAgentName] = useState("");
+  const [replyDelay, setReplyDelay] = useState("");
   const [profile, setProfile] = useState<Profile>("RETAIL");
   const [notifyPhone, setNotifyPhone] = useState("");
   const [matchMode, setMatchMode] = useState<"APPROVAL" | "AUTO">("APPROVAL");
@@ -110,6 +120,7 @@ export default function AIConfigPage(): React.ReactElement {
     if (tenant) {
       setEnabled(tenant.aiAutoReply ?? false);
       setAgentName(tenant.aiAgentName ?? "");
+      setReplyDelay(tenant.aiReplyDelaySec == null ? "" : String(tenant.aiReplyDelaySec));
       setProfile(tenant.agentProfile ?? "RETAIL");
       setNotifyPhone(tenant.ownerNotifyPhone ?? "");
       setMatchMode(tenant.matchAlertMode ?? "APPROVAL");
@@ -131,7 +142,9 @@ export default function AIConfigPage(): React.ReactElement {
     const trimmed = Object.fromEntries(
       CONTEXT_FIELDS.map((f) => [f.key, context[f.key].trim() || null]),
     ) as Record<ContextKey, string | null>;
+    const delay = replyDelay.trim() === "" ? null : Math.min(Math.max(Math.round(Number(replyDelay)), 0), 120);
     update.mutate({
+      aiReplyDelaySec: Number.isFinite(delay) ? delay : null,
       aiAutoReply: enabled,
       aiAgentName: agentName.trim() || null,
       agentProfile: profile,
@@ -178,6 +191,48 @@ export default function AIConfigPage(): React.ReactElement {
             </div>
             <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
+
+          <div className="mt-5 space-y-2 border-t pt-5">
+            <Label htmlFor="replyDelay" className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" /> Tiempo de espera antes de responder
+            </Label>
+            <div className="flex flex-wrap items-center gap-2">
+              {REPLY_DELAY_PRESETS.map((preset) => (
+                <Button
+                  key={preset.value}
+                  type="button"
+                  size="sm"
+                  variant={replyDelay === preset.value ? "default" : "outline"}
+                  onClick={() => setReplyDelay(preset.value)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <Input
+                  id="replyDelay"
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={replyDelay}
+                  onChange={(e) => setReplyDelay(e.target.value)}
+                  placeholder="6"
+                  className="h-8 w-20"
+                />
+                <span className="text-xs text-muted-foreground">segundos</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              El agente espera este tiempo sin mensajes nuevos del cliente para responder todo junto (por ejemplo “hola”,
+              “tienen jeans?”, “talla 32”). Más tiempo agrupa mejor; menos tiempo responde más rápido. Máximo 120 s. Vacío
+              usa el valor por defecto.
+            </p>
+            <div className="flex justify-end">
+              <Button onClick={save} disabled={update.isPending}>
+                <Sparkles className="h-4 w-4" /> Guardar cambios
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -186,7 +241,7 @@ export default function AIConfigPage(): React.ReactElement {
           <div>
             <div className="text-sm font-semibold">Tipo de negocio</div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Define qué hace el asistente y qué reglas trae por defecto. Al cambiarlo se cargan las reglas del nuevo tipo; las
+              Define qué hace el asistente y qué habilidades trae por defecto. Al cambiarlo se cargan las del nuevo tipo; las
               que agregaste tú se conservan.
             </p>
           </div>
@@ -278,17 +333,35 @@ export default function AIConfigPage(): React.ReactElement {
         </CardContent>
       </Card>
 
-      <Link href="/configuracion/ia/reglas" className="block">
+      <Link href="/configuracion/ia/habilidades" className="block">
         <Card className="transition-colors hover:bg-accent/40">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="rounded-md bg-wa/15 p-2 text-wa">
               <ListChecks className="h-5 w-5" />
             </div>
             <div className="flex-1">
-              <div className="text-sm font-semibold">Reglas de la IA</div>
+              <div className="text-sm font-semibold">Habilidades del agente</div>
               <p className="text-xs text-muted-foreground">
                 Qué puede y no puede decir, preguntas para calificar, cuándo pasar a una persona y el trato. Las editas tú, sin
                 tocar código.
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </Link>
+
+      <Link href="/configuracion/ia/voz" className="block">
+        <Card className="transition-colors hover:bg-accent/40">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="rounded-md bg-wa/15 p-2 text-wa">
+              <AudioLines className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-semibold">Voz del agente</div>
+              <p className="text-xs text-muted-foreground">
+                Que entienda las notas de voz de tus clientes y les responda con voz: elige o clona la voz y decide cuándo
+                habla.
               </p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />

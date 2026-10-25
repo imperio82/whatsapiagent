@@ -1,0 +1,1 @@
+1. revisar si el nombre del usuario esta completo, si tienen iniciales, o algo diferente que nos indique que no es un nombre real, preguntar su nombre para dar una atención personalisada y humana, después procede el flujo normal de atención atenciendo a la persona con el nombre
