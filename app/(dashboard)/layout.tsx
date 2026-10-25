@@ -3,6 +3,7 @@ import { auth } from "@modules/auth/infrastructure/auth-config";
 import { Sidebar } from "@components/layout/sidebar";
 import { Topbar } from "@components/layout/topbar";
 import { HandoffAlerts } from "@components/features/chats/handoff-alerts";
+import { QuickStart } from "@components/layout/quick-start";
 
 export default async function DashboardLayout({
   children,
@@ -29,6 +30,7 @@ export default async function DashboardLayout({
         </main>
       </div>
       <HandoffAlerts />
+      <QuickStart />
     </div>
   );
 }

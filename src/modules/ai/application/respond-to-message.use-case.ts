@@ -10,6 +10,11 @@ import { loadActiveRules } from "../infrastructure/ai-rules";
 import { GRAPH_PROFILES } from "../infrastructure/graph/profiles";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
 import { formatClientProfile, resumeNote } from "../domain/client-memory";
+import { aiBudgetExhausted } from "@modules/billing/application/usage";
+import { decideVoiceReply, type VoiceDecision } from "@modules/voice/domain/voice-policy";
+import { loadVoiceSettings, logVoiceUsage, saveClip, synthesizeReply, type VoiceSettings } from "@modules/voice/application/voice-runtime";
+import { elevenLabsConfigured, geminiConfigured } from "@modules/voice/infrastructure/speech";
+import { sendsVoiceNotes } from "@modules/whatsapp/infrastructure/provider-factory";
 
 const FALLBACK_MESSAGE =
   "Disculpa, tuve un problema procesando tu mensaje 🙏 Alguien del equipo te va a responder en un momento.";
@@ -56,7 +61,10 @@ interface TurnResult extends ChatTurnOutput {
   intent?: string;
   handoff?: boolean;
   trace?: TraceStep[];
+  delivery?: VoiceDecision;
 }
+
+const TEXT_ONLY: VoiceDecision = { voice: false, alsoText: false, reason: "por texto" };
 
 /**
  * Extrae el primer teléfono parseable de un texto libre.
@@ -97,6 +105,14 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     }
     if (!tenant.aiAutoReply) {
       console.log(`[ai respond] SKIP: aiAutoReply=false para tenant ${tenant.name}`);
+      return;
+    }
+    if (tenant.status !== "ACTIVE") {
+      console.log(`[ai respond] SKIP: negocio ${tenant.name} en estado ${tenant.status}`);
+      return;
+    }
+    if (await aiBudgetExhausted(tenant)) {
+      console.log(`[ai respond] SKIP: ${tenant.name} gastó el presupuesto de IA del mes (plan ${tenant.plan})`);
       return;
     }
 
@@ -156,9 +172,16 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     // Si el cliente retoma después de horas o días, se le avisa al agente en el mismo mensaje
     const chatHistory: ChatMessage[] = orderedMessages.map((m, i) => {
       const note = m.direction === "INBOUND" ? resumeNote(orderedMessages[i - 1]?.sentAt ?? null, m.sentAt) : null;
+      // Las notas de voz llegan transcritas; el agente sabe que el cliente habló
+      const content =
+        m.type === "AUDIO" && m.direction === "INBOUND"
+          ? m.content
+            ? `[Nota de voz] ${m.content}`
+            : "[Nota de voz que no se pudo transcribir: pídele amablemente que la escriba]"
+          : m.content;
       return {
         role: m.direction === "INBOUND" ? "user" : "assistant",
-        content: note ? `${note} ${m.content}` : m.content,
+        content: note ? `${note} ${content}` : content,
       };
     });
 
@@ -202,6 +225,13 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
 
     // Reglas de negocio editables (tabla ai_rules)
     const rules = await loadActiveRules(tenantId, profile);
+
+    // Voz del agente: solo si el proveedor de WhatsApp manda audios y la voz elegida está disponible
+    const voice = await loadVoiceSettings(tenantId);
+    const voiceAvailable =
+      sendsVoiceNotes(this.whatsapp) && (voice.provider === "ELEVENLABS" ? elevenLabsConfigured() : geminiConfigured());
+    const voicePolicy = { ...voice, enabled: voice.enabled && voiceAvailable };
+    const clientSentAudio = last.type === "AUDIO";
 
     // Los clientes creados automáticamente se llaman "Cliente 1234": ese nombre no sirve para saludar
     const clientName = conversation.client?.name;
@@ -251,6 +281,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           tools,
           profile: GRAPH_PROFILES[profile],
           handoffRules: rules.filter((r) => r.category === "HANDOFF").map((r) => r.content),
+          voice: { policy: voicePolicy, clientSentAudio },
         });
         result = { ...graph };
         for (const step of graph.trace) {
@@ -262,7 +293,17 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           messages: chatHistory,
           tools,
         });
-        result = { ...simple, provider: this.ai.kind };
+        result = {
+          ...simple,
+          provider: this.ai.kind,
+          // Sin router no hay reglas de voz: el modo por reglas se comporta como "si el cliente manda audio"
+          delivery: decideVoiceReply(voicePolicy, {
+            reply: simple.text,
+            intent: "",
+            clientSentAudio,
+            routerSuggestsVoice: clientSentAudio,
+          }),
+        };
       }
     } catch (err) {
       // 2.5 — la IA falló. NO dejamos al cliente en silencio: enviamos un
@@ -284,35 +325,93 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       return;
     }
 
-    // Enviar por WhatsApp
-    const sent = await this.whatsapp.sendText(tenantId, {
-      to: conversation.waChatId,
-      text: reply,
-    });
+    const delivery = result.delivery ?? TEXT_ONLY;
+    const voiceSent = delivery.voice ? await this.sendVoiceReply(tenantId, conversation, voice, reply) : null;
 
-    // Persistir como mensaje autoría IA
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        waMessageId: sent.providerMessageId,
-        direction: "OUTBOUND",
-        type: "TEXT",
-        content: reply,
-        authoredBy: "AI",
-        sentAt: sent.sentAt,
-      },
-    });
+    // Por texto: si no va con voz, si la voz falló o si además lleva los datos escritos
+    let sent = voiceSent;
+    if (!voiceSent || delivery.alsoText) {
+      sent = await this.whatsapp.sendText(tenantId, {
+        to: conversation.waChatId,
+        text: reply,
+      });
+
+      // Persistir como mensaje autoría IA
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          waMessageId: sent.providerMessageId,
+          direction: "OUTBOUND",
+          type: "TEXT",
+          content: reply,
+          authoredBy: "AI",
+          sentAt: sent.sentAt,
+        },
+      });
+    }
 
     // Pasó a una persona: queda por revisar y la IA no responde por un tiempo
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: {
-        lastMessageAt: sent.sentAt,
+        lastMessageAt: sent!.sentAt,
         ...(result.handoff
           ? { status: "PENDING_REVIEW", aiPausedUntil: new Date(Date.now() + HANDOFF_PAUSE_MS) }
           : {}),
       },
     });
+  }
+
+  /**
+   * Nota de voz con la respuesta: se genera con la voz del negocio, se envía, se guarda para escucharla
+   * en el panel y su costo entra al presupuesto. Si algo falla devuelve null y la respuesta sale por texto.
+   */
+  private async sendVoiceReply(
+    tenantId: string,
+    conversation: { id: string; waChatId: string },
+    settings: VoiceSettings,
+    reply: string,
+  ): Promise<{ providerMessageId: string; sentAt: Date } | null> {
+    try {
+      const started = Date.now();
+      const audio = await synthesizeReply(settings, reply);
+      const sent = await this.whatsapp.sendVoice!(tenantId, { to: conversation.waChatId, audio: audio.ogg, seconds: audio.seconds });
+      const mediaUrl = await saveClip({
+        tenantId,
+        conversationId: conversation.id,
+        data: audio.ogg,
+        mimeType: "audio/ogg",
+        seconds: audio.seconds,
+      });
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          waMessageId: sent.providerMessageId,
+          direction: "OUTBOUND",
+          type: "AUDIO",
+          content: reply,
+          mediaUrl,
+          authoredBy: "AI",
+          sentAt: sent.sentAt,
+        },
+      });
+      await logVoiceUsage({
+        tenantId,
+        conversationId: conversation.id,
+        kind: "voz",
+        provider: audio.provider,
+        model: audio.model,
+        tokensIn: audio.unitsIn,
+        tokensOut: audio.unitsOut,
+        costMicroUsd: audio.costMicroUsd,
+        detail: `nota de voz de ${audio.seconds.toFixed(1)} s con ${settings.voiceName ?? settings.voiceId} en ${Date.now() - started} ms`,
+      });
+      console.log(`[ai respond] nota de voz enviada (${audio.seconds.toFixed(1)} s, ${audio.model})`);
+      return sent;
+    } catch (err) {
+      console.error("[ai respond] ⚠️ no se pudo enviar la nota de voz, va por texto:", err);
+      return null;
+    }
   }
 
   /**

@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
     "@whiskeysockets/baileys",
     "@hapi/boom",
     "pino",
+    // Codificador Opus de las notas de voz: carga su .wasm desde node_modules
+    "opusscript",
   ],
   webpack: (config, { isServer }) => {
     if (isServer) {

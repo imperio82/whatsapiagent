@@ -21,6 +21,7 @@ import {
   useSendMessage,
 } from "@hooks/use-conversations";
 import { useWhatsappStatus } from "@hooks/use-whatsapp";
+import { VoiceNote } from "./voice-note";
 
 interface Props {
   conversationId: string | null;
@@ -144,7 +145,11 @@ export function MessageThread({ conversationId }: Props): React.ReactElement {
                       <Bot className="h-3 w-3" /> Respondido por IA
                     </div>
                   )}
-                  <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                  {m.type === "AUDIO" ? (
+                    <VoiceNote src={m.mediaUrl} transcript={m.content} outbound={isOut} />
+                  ) : (
+                    <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                  )}
                 </div>
                 <span className="mt-1 text-[10px] text-muted-foreground">
                   {format(new Date(m.sentAt), "HH:mm", { locale: es })}

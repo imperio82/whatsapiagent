@@ -20,6 +20,18 @@ export interface SendTextParams {
   externalId?: string;
 }
 
+export interface SendVoiceParams {
+  to: string;
+  /** Nota de voz OGG/Opus: WhatsApp solo la muestra como nota de voz con ese formato */
+  audio: Buffer;
+  seconds: number;
+}
+
+export interface MediaDownload {
+  data: Buffer;
+  mimeType: string;
+}
+
 export interface ShowTypingParams {
   to: string;               // E.164 del cliente
   inboundMessageId: string; // id del mensaje del cliente que se está respondiendo
@@ -38,6 +50,8 @@ export interface InboundMessage {
   type: "text" | "image" | "audio" | "video" | "document";
   text?: string;
   mediaUrl?: string;
+  /** Audio u otro archivo: Meta manda el id para descargarlo; Baileys ya lo trae descargado */
+  media?: { id?: string; data?: Buffer; mimeType?: string };
   contactName?: string;
   timestamp: Date;
 }
@@ -65,6 +79,12 @@ export interface WhatsAppProvider {
    * mientras la IA prepara la respuesta. Best-effort: nunca debe bloquear el envío.
    */
   showTyping?(tenantId: string, params: ShowTypingParams): Promise<void>;
+
+  /** Opcional: envía una nota de voz. Sin esto, el agente responde por texto. */
+  sendVoice?(tenantId: string, params: SendVoiceParams): Promise<SendTextResult>;
+
+  /** Opcional: descarga un archivo recibido por su id (Meta). */
+  downloadMedia?(tenantId: string, mediaId: string): Promise<MediaDownload>;
 
   /** Registra un handler global para mensajes entrantes. */
   onInbound(handler: InboundHandler): void;

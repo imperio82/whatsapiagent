@@ -4,6 +4,7 @@ import { TenantContext } from "@shared/application/tenant-context";
 import type { UseCase } from "@shared/domain/use-case";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { switchProfileRules } from "@modules/ai/infrastructure/ai-rules";
+import { MAX_REPLY_DELAY_SEC } from "@modules/whatsapp/infrastructure/reply-debouncer";
 import { toCurrentTenantDto, type CurrentTenantDto } from "./get-current-tenant.use-case";
 
 export const updateTenantSchema = z.object({
@@ -14,6 +15,7 @@ export const updateTenantSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   aiAutoReply: z.boolean().optional(),
   aiAgentName: z.string().max(40).nullable().optional(),
+  aiReplyDelaySec: z.number().int().min(0).max(MAX_REPLY_DELAY_SEC).nullable().optional(),
   businessHours: z.string().max(500).nullable().optional(),
   deliveryInfo: z.string().max(2000).nullable().optional(),
   paymentInfo: z.string().max(1000).nullable().optional(),

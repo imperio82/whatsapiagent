@@ -14,6 +14,8 @@ export interface CurrentTenantDto {
   status: "ACTIVE" | "SUSPENDED" | "CANCELLED";
   aiAutoReply?: boolean;
   aiAgentName?: string | null;
+  /** null: usa la espera por defecto del servidor */
+  aiReplyDelaySec: number | null;
   businessHours: string | null;
   deliveryInfo: string | null;
   paymentInfo: string | null;
@@ -41,6 +43,7 @@ export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
     status: tenant.status,
     aiAutoReply: tenant.aiAutoReply,
     aiAgentName: tenant.aiAgentName,
+    aiReplyDelaySec: tenant.aiReplyDelaySec,
     businessHours: tenant.businessHours,
     deliveryInfo: tenant.deliveryInfo,
     paymentInfo: tenant.paymentInfo,

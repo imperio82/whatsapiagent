@@ -5,8 +5,10 @@ import type {
   ConnectionState,
   InboundHandler,
   InboundMessage,
+  MediaDownload,
   SendTextParams,
   SendTextResult,
+  SendVoiceParams,
   ShowTypingParams,
   WhatsAppProvider,
 } from "../../domain/ports/whatsapp-provider";
@@ -125,6 +127,47 @@ export class MetaCloudProvider implements WhatsAppProvider {
   }
 
   async sendText(tenantId: string, params: SendTextParams): Promise<SendTextResult> {
+    return this.sendMessage(tenantId, params.to, { type: "text", text: { body: params.text } });
+  }
+
+  /**
+   * Nota de voz: se sube el OGG/Opus a Meta y se envía con `voice: true` para que WhatsApp la
+   * muestre como audio grabado y no como archivo.
+   */
+  async sendVoice(tenantId: string, params: SendVoiceParams): Promise<SendTextResult> {
+    const { phoneNumberId, accessToken } = await this.credentials(tenantId);
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", "audio/ogg");
+    form.append("file", new Blob([new Uint8Array(params.audio)], { type: "audio/ogg" }), "nota-de-voz.ogg");
+    const upload = await graphFetch(`${GRAPH_BASE}/${phoneNumberId}/media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    });
+    if (!upload.ok) {
+      throw new InfrastructureError(`WhatsApp (Meta) no recibió el audio: ${await graphErrorMessage(upload)}`);
+    }
+    const { id } = (await upload.json()) as { id?: string };
+    if (!id) throw new InfrastructureError("Meta API: subida de audio sin id");
+    return this.sendMessage(tenantId, params.to, { type: "audio", audio: { id, voice: true } });
+  }
+
+  /** Descarga un archivo recibido (por ejemplo, una nota de voz del cliente). */
+  async downloadMedia(tenantId: string, mediaId: string): Promise<MediaDownload> {
+    const { accessToken } = await this.credentials(tenantId);
+    const meta = await graphFetch(`${GRAPH_BASE}/${encodeURIComponent(mediaId)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!meta.ok) throw new InfrastructureError(`Meta no encontró el archivo: ${await graphErrorMessage(meta)}`);
+    const info = (await meta.json()) as { url?: string; mime_type?: string };
+    if (!info.url) throw new InfrastructureError("Meta API: archivo sin url");
+    const file = await graphFetch(info.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!file.ok) throw new InfrastructureError(`Meta no entregó el archivo: ${await graphErrorMessage(file)}`);
+    return { data: Buffer.from(await file.arrayBuffer()), mimeType: info.mime_type ?? "application/octet-stream" };
+  }
+
+  private async credentials(tenantId: string): Promise<{ phoneNumberId: string; accessToken: string }> {
     const account = await prisma.whatsappAccount.findUnique({ where: { tenantId } });
     if (
       account?.provider !== "meta" ||
@@ -134,9 +177,12 @@ export class MetaCloudProvider implements WhatsAppProvider {
     ) {
       throw new InfrastructureError("Cuenta de WhatsApp Meta no configurada");
     }
+    return { phoneNumberId: account.phoneNumberId, accessToken: decryptSecret(account.accessTokenEnc) };
+  }
 
-    const accessToken = decryptSecret(account.accessTokenEnc);
-    const res = await graphFetch(`${GRAPH_BASE}/${account.phoneNumberId}/messages`, {
+  private async sendMessage(tenantId: string, to: string, content: Record<string, unknown>): Promise<SendTextResult> {
+    const { phoneNumberId, accessToken } = await this.credentials(tenantId);
+    const res = await graphFetch(`${GRAPH_BASE}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -145,9 +191,8 @@ export class MetaCloudProvider implements WhatsAppProvider {
       body: JSON.stringify({
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to: params.to,
-        type: "text",
-        text: { body: params.text },
+        to,
+        ...content,
       }),
     });
 

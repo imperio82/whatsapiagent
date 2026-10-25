@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { AITool, ChatMessage } from "../../domain/ports/ai-provider";
 import { verifyReply } from "../../domain/reply-verifier";
 import { COMMON_RULES } from "../system-prompt";
+import { decideVoiceReply, type VoiceDecision, type VoicePolicy } from "@modules/voice/domain/voice-policy";
 import { createChatModel } from "./chat-model";
 import { toLangChainTools } from "./lc-tools";
 import { GRAPH_PROFILES, type GraphProfile } from "./profiles";
@@ -17,10 +18,14 @@ import { GRAPH_PROFILES, type GraphProfile } from "./profiles";
 /**
  * Grafo multiagente por WhatsApp:
  *
- *   router ─┬─ especialista ─ verificador ─┬─ END
+ *   router ─┬─ especialista ─ verificador ─┬─ voz ─ END
  *           │   (ventas, pedido, info…)    ├─ (falla 1 vez) ─ vuelve al especialista con la corrección
  *           │                              └─ (falla 2 veces) ─ humano ─ END
  *           └─ humano ─ END
+ *
+ * "voz" decide con código fijo si la respuesta ya verificada sale como nota de voz o por texto
+ * (ver voice-policy.ts). En el modo por reglas, el router evalúa las reglas de voz en la misma
+ * llamada en que clasifica el mensaje, sin una llamada extra a la IA.
  *
  * Qué especialistas hay y qué herramientas usa cada uno depende del perfil del negocio
  * (tienda o intermediación, ver profiles.ts). Los especialistas razonan con IA y usan
@@ -33,7 +38,7 @@ export type Intent = string;
 
 export interface TraceStep {
   node: string;
-  type: "ruta" | "herramienta" | "respuesta" | "verificacion" | "humano";
+  type: "ruta" | "herramienta" | "respuesta" | "verificacion" | "humano" | "voz";
   detail?: string;
   tool?: string;
   args?: unknown;
@@ -58,6 +63,8 @@ export interface GraphTurnResult {
   toolCallsUsed: number;
   model: string;
   provider: "openai" | "gemini";
+  /** Cómo sale la respuesta: por texto o como nota de voz */
+  delivery: VoiceDecision;
 }
 
 const MAX_TOOL_STEPS = 5;
@@ -66,6 +73,7 @@ const HANDOFF_MESSAGE =
   "Ya paso tu mensaje a alguien del equipo 🙌 En un momento te responden por aquí.";
 
 const last = <T>(_a: T, b: T) => b;
+const TEXT_ONLY: VoiceDecision = { voice: false, alsoText: false, reason: "por texto" };
 
 const State = Annotation.Root({
   ...MessagesAnnotation.spec,
@@ -75,6 +83,8 @@ const State = Annotation.Root({
   correction: Annotation<string | null>({ reducer: last, default: () => null }),
   handoff: Annotation<boolean>({ reducer: last, default: () => false }),
   verified: Annotation<boolean>({ reducer: last, default: () => false }),
+  voiceSuggested: Annotation<boolean>({ reducer: last, default: () => false }),
+  delivery: Annotation<VoiceDecision>({ reducer: last, default: () => TEXT_ONLY }),
   trace: Annotation<TraceStep[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
   toolOutputs: Annotation<string[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
   usage: Annotation<Usage>({
@@ -88,11 +98,15 @@ const State = Annotation.Root({
 });
 type GraphState = typeof State.State;
 
-const routerSchema = (intents: readonly [string, ...string[]]) =>
-  z.object({
+const routerSchema = (intents: readonly [string, ...string[]], voiceRules: boolean) => {
+  const base = z.object({
     intent: z.enum([...intents, "humano"] as [string, ...string[]]),
     reason: z.string().describe("Por qué, en pocas palabras"),
   });
+  return voiceRules
+    ? base.extend({ voz: z.boolean().describe("true si, según las reglas de voz, este turno se responde con nota de voz") })
+    : base;
+};
 
 /** Las herramientas que entregan la conversación a una persona lo indican con "handoff": true. */
 function asksForHandoff(output: string): boolean {
@@ -128,8 +142,12 @@ export async function runSalesGraph(input: {
   profile?: GraphProfile;
   /** Reglas del negocio sobre cuándo pasar a una persona (de la base de datos), para el router. */
   handoffRules?: string[];
+  /** Voz del agente: cuándo responder con nota de voz y si el cliente mandó una */
+  voice?: { policy: VoicePolicy; clientSentAudio: boolean };
 }): Promise<GraphTurnResult> {
   const profile = input.profile ?? GRAPH_PROFILES.RETAIL;
+  const voiceRules =
+    !!input.voice?.policy.enabled && input.voice.policy.mode === "RULES" && input.voice.policy.rules.length > 0;
   const { model, modelName, provider } = createChatModel();
   const lcTools = toLangChainTools(input.tools);
   // Las aclaraciones del perfil van al final, después de las reglas del negocio, para que pesen más
@@ -139,6 +157,9 @@ export async function runSalesGraph(input: {
       ? `Además, según las reglas del negocio, elige "humano" en estos casos:\n${input.handoffRules.map((r) => `- ${r}`).join("\n")}`
       : "",
     profile.routerExceptions ?? "",
+    voiceRules
+      ? `Además, decide si este turno se responde con nota de voz (campo "voz"). Responde con voz cuando:\n${input.voice!.policy.rules.map((r) => `- ${r}`).join("\n")}\nEn cualquier otro caso, "voz" es false.`
+      : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -148,7 +169,10 @@ export async function runSalesGraph(input: {
   // ── router: clasifica la intención con salida estructurada ──────────────
   async function router(state: GraphState): Promise<Partial<GraphState>> {
     const started = Date.now();
-    const classifier = model.withStructuredOutput(routerSchema(profile.intents), { name: "clasificar_mensaje", includeRaw: true });
+    const classifier = model.withStructuredOutput(routerSchema(profile.intents, voiceRules), {
+      name: "clasificar_mensaje",
+      includeRaw: true,
+    });
     const transcript = state.messages
       .slice(-8)
       .map((m) => `${m instanceof HumanMessage ? "Cliente" : profile.businessLabel}: ${textOf(m)}`)
@@ -160,10 +184,17 @@ export async function runSalesGraph(input: {
     const chosen = parsed?.intent as string | undefined;
     const intent: Intent =
       chosen === "humano" || (chosen && profile.specialists[chosen]) ? chosen : profile.defaultIntent;
+    const voz = (parsed as { voz?: boolean } | undefined)?.voz === true;
     return {
       intent,
+      voiceSuggested: voz,
       usage: usageOf(raw),
-      trace: [{ node: "router", type: "ruta", detail: `${intent}: ${parsed?.reason ?? "sin razón"}`, ms: Date.now() - started }],
+      trace: [{
+        node: "router",
+        type: "ruta",
+        detail: `${intent}: ${parsed?.reason ?? "sin razón"}${voiceRules ? (voz ? " · pide voz" : " · sin voz") : ""}`,
+        ms: Date.now() - started,
+      }],
     };
   }
 
@@ -265,8 +296,28 @@ export async function runSalesGraph(input: {
   }
 
   function afterVerification(state: GraphState): string {
-    if (state.verified) return END;
+    if (state.verified) return "voz";
     return state.attempts <= MAX_RETRIES ? "especialista" : "humano";
+  }
+
+  // ── voz: texto o nota de voz, con código fijo ────────────────────────────
+  function voz(state: GraphState): Partial<GraphState> {
+    if (!input.voice?.policy.enabled) return { delivery: TEXT_ONLY };
+    const delivery = decideVoiceReply(input.voice.policy, {
+      reply: state.reply,
+      intent: state.intent,
+      clientSentAudio: input.voice.clientSentAudio,
+      routerSuggestsVoice: state.voiceSuggested,
+    });
+    return {
+      delivery,
+      trace: [{
+        node: "voz",
+        type: "voz",
+        ok: true,
+        detail: `${delivery.voice ? (delivery.alsoText ? "nota de voz y texto" : "nota de voz") : "por texto"}: ${delivery.reason}`,
+      }],
+    };
   }
 
   // ── humano: entrega a una persona del equipo ─────────────────────────────
@@ -287,13 +338,15 @@ export async function runSalesGraph(input: {
     .addNode("especialista", specialist)
     .addNode("verificador", verificador)
     .addNode("humano", humano)
+    .addNode("voz", voz)
     .addEdge(START, "router")
     .addConditionalEdges("router", (s: GraphState) => (s.intent === "humano" ? "humano" : "especialista"), [
       "especialista",
       "humano",
     ])
     .addEdge("especialista", "verificador")
-    .addConditionalEdges("verificador", afterVerification, ["especialista", "humano", END])
+    .addConditionalEdges("verificador", afterVerification, ["especialista", "humano", "voz"])
+    .addEdge("voz", END)
     .addEdge("humano", END)
     .compile();
 
@@ -313,5 +366,6 @@ export async function runSalesGraph(input: {
     toolCallsUsed: final.usage.toolCalls,
     model: modelName,
     provider,
+    delivery: final.delivery,
   };
 }

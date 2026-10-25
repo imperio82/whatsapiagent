@@ -27,6 +27,8 @@ model Tenant {
   status            TenantStatus   @default(ACTIVE)
   aiAutoReply       Boolean        @default(false)
   aiAgentName       String?
+  // Segundos que el agente espera sin mensajes nuevos antes de responder (null: AI_REPLY_DELAY_MS del servidor)
+  aiReplyDelaySec   Int?
   // Tipo de agente: tienda (catálogo y pedidos) o intermediación (inventario de bienes, calificación y citas)
   agentProfile      AgentProfile   @default(RETAIL)
   // Número (solo dígitos, con indicativo) al que la IA avisa compradores calientes, ofertas, citas y bienes nuevos
@@ -51,6 +53,9 @@ model Tenant {
   orderSeq          Int            @default(0)
   // Consecutivo de bienes del inventario (INV-0001)
   listingSeq        Int            @default(0)
+  // Plan contratado y hasta cuándo está pago (null: nunca ha pagado)
+  plan              PlanTier       @default(EMPRENDE)
+  paidUntil         DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
@@ -73,8 +78,44 @@ model Tenant {
   clientDates     ClientDate[]
   clientRelations ClientRelation[]
   greetings       Greeting[]
+  billingEntries  BillingEntry[]
+  agentVoice      AgentVoice?
+  clonedVoices    ClonedVoice[]
+  voiceClips      VoiceClip[]
 
   @@map("tenants")
+}
+
+// Planes que se venden; precios, cupos y presupuesto de IA viven en src/modules/billing/domain/plans.ts
+enum PlanTier {
+  EMPRENDE
+  PRO
+  NEGOCIO
+}
+
+// Movimientos de cobro que registra el administrador de la plataforma
+model BillingEntry {
+  id             String      @id @default(cuid())
+  tenantId       String
+  kind           BillingKind
+  // PAYMENT: lo que pagó en pesos y cuántos meses cubre
+  amountCop      Int?
+  months         Int?
+  // CREDIT: dólares de IA que se suman al presupuesto del mes en que se dan
+  creditMicroUsd Int?
+  note           String?
+  createdById    String?
+  createdAt      DateTime    @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("billing_entries")
+}
+
+enum BillingKind {
+  PAYMENT
+  CREDIT
 }
 
 enum MatchAlertMode {
@@ -913,4 +954,86 @@ model Greeting {
   @@unique([clientDateId, occursOn])
   @@index([tenantId, status])
   @@map("greetings")
+}
+
+// ============================================================================
+// VOZ DEL AGENTE
+// ============================================================================
+
+// Cómo usa la voz el agente: entender las notas de voz de los clientes y responder con voz.
+// Si el negocio no tiene fila, rigen los valores por defecto (solo transcribir).
+model AgentVoice {
+  id                String         @id @default(cuid())
+  tenantId          String         @unique
+  // Transcribe las notas de voz que mandan los clientes para que el agente las lea
+  transcribeInbound Boolean        @default(true)
+  // Responde con notas de voz según `mode`
+  enabled           Boolean        @default(false)
+  provider          VoiceProvider  @default(GEMINI)
+  // Voz de Gemini (Kore, Puck…) o id de voz de ElevenLabs (prediseñada o clonada)
+  voiceId           String         @default("Kore")
+  voiceName         String?
+  // Tono con que habla: "cálido y cercano, con acento colombiano"
+  style             String?
+  mode              VoiceReplyMode @default(MIRROR)
+  // Modo RULES: cuándo responder con voz, en palabras del negocio; las evalúa el router
+  rules             String[]       @default([])
+  // Especialistas que pueden responder con voz; vacío = todos
+  intents           String[]       @default([])
+  // Respuestas más largas van por texto
+  maxSeconds        Int            @default(40)
+  // Si la respuesta trae precios, enlaces o códigos, también se manda por texto
+  textForData       Boolean        @default(true)
+  // Manda siempre el texto debajo del audio
+  alsoSendText      Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("agent_voices")
+}
+
+enum VoiceProvider {
+  GEMINI
+  ELEVENLABS
+}
+
+enum VoiceReplyMode {
+  MIRROR // responde con voz cuando el cliente manda una nota de voz
+  RULES // según las reglas del negocio
+  ALWAYS
+}
+
+// Voces clonadas por el negocio en ElevenLabs. La cuenta de ElevenLabs es de la plataforma,
+// así que cada negocio solo ve y usa las suyas.
+model ClonedVoice {
+  id              String   @id @default(cuid())
+  tenantId        String
+  providerVoiceId String   @unique
+  name            String
+  // Quién confirmó tener la autorización de la persona dueña de la voz
+  consentById     String
+  createdAt       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("cloned_voices")
+}
+
+// Audios de las conversaciones (notas de voz del cliente y del agente) para escucharlos en el panel
+model VoiceClip {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String?
+  mimeType       String
+  seconds        Float?
+  data           Bytes
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("voice_clips")
 }

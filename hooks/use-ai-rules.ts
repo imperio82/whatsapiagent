@@ -22,7 +22,7 @@ export function useCreateAiRule() {
     mutationFn: (input: CreateAiRuleInput) => aiRulesService.create(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
-      toast.success("Regla creada");
+      toast.success("Habilidad creada");
     },
     onError: showError,
   });
@@ -43,7 +43,7 @@ export function useDeleteAiRule() {
     mutationFn: (id: string) => aiRulesService.remove(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
-      toast.success("Regla eliminada");
+      toast.success("Habilidad eliminada");
     },
     onError: showError,
   });
@@ -55,7 +55,7 @@ export function useRestoreAiRules() {
     mutationFn: () => aiRulesService.restore(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
-      toast.success("Reglas por defecto restauradas");
+      toast.success("Habilidades por defecto restauradas");
     },
     onError: showError,
   });

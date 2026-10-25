@@ -69,6 +69,7 @@ export async function POST(req: Request): Promise<Response> {
         providerMessageId: m.providerMessageId,
         type: m.type,
         text: m.text,
+        media: m.media,
         contactName: m.contactName,
         timestamp: m.timestamp,
       });
@@ -123,6 +124,7 @@ interface MetaWebhookPayload {
           type?: string;
           text?: { body?: string };
           image?: { caption?: string; id?: string };
+          audio?: { id?: string; mime_type?: string; voice?: boolean };
         }>;
       };
     }>;
@@ -150,6 +152,7 @@ function extractInboundMessages(payload: MetaWebhookPayload): ExtractedInbound[]
           providerMessageId: m.id,
           type,
           text: m.text?.body ?? m.image?.caption ?? "",
+          media: m.audio?.id ? { id: m.audio.id, mimeType: m.audio.mime_type } : undefined,
           contactName,
           timestamp: ts,
         });

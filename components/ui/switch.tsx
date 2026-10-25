@@ -8,15 +8,17 @@ interface SwitchProps {
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
   id?: string;
+  "aria-label"?: string;
 }
 
-export function Switch({ checked, onCheckedChange, disabled, id }: SwitchProps): React.ReactElement {
+export function Switch({ checked, onCheckedChange, disabled, id, "aria-label": ariaLabel }: SwitchProps): React.ReactElement {
   return (
     <button
       id={id}
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
