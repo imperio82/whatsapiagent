@@ -73,7 +73,8 @@ export default function AgentSimulatorPage(): React.ReactElement {
   const [text, setText] = useState("");
   /** Mientras se espera la respuesta: desde cuándo y cuántas respuestas había al enviar. */
   const [waiting, setWaiting] = useState<{ since: number; repliesBefore: number } | null>(null);
-  const [timedOut, setTimedOut] = useState(false);
+  // Respuestas que había cuando se dejó de esperar: si llega una después, el aviso se quita solo
+  const [timedOut, setTimedOut] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: status } = useSimulatorStatus();
@@ -104,10 +105,14 @@ export default function AgentSimulatorPage(): React.ReactElement {
     const limit = (status?.replyDelayMs ?? 6000) + REPLY_TIMEOUT_MS;
     const timer = setTimeout(() => {
       setWaiting(null);
-      setTimedOut(true);
+      setTimedOut(waiting.repliesBefore);
     }, Math.max(0, waiting.since + limit - Date.now()));
     return () => clearTimeout(timer);
   }, [waiting, answered, paused, status?.replyDelayMs]);
+
+  useEffect(() => {
+    if (timedOut !== null && replies > timedOut) setTimedOut(null);
+  }, [timedOut, replies]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -123,14 +128,14 @@ export default function AgentSimulatorPage(): React.ReactElement {
       ...(audio ? { audio: { data: audio, mimeType: "audio/wav" as const } } : {}),
     });
     if (!audio) setText("");
-    setTimedOut(false);
+    setTimedOut(null);
     setWaiting((current) => current ?? { since: Date.now(), repliesBefore: replies });
     if (result.conversationId !== session.conversationId) update({ ...session, conversationId: result.conversationId });
   }
 
   function restart() {
     setWaiting(null);
-    setTimedOut(false);
+    setTimedOut(null);
     update(newSession());
   }
 
@@ -267,10 +272,11 @@ export default function AgentSimulatorPage(): React.ReactElement {
               </Button>
             </div>
           )}
-          {timedOut && (
+          {timedOut !== null && (
             <div className="flex items-center gap-2 border-t border-border bg-destructive/10 px-4 py-2 text-xs text-destructive">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              El agente no respondió. Revisa la clave de IA y los registros del servidor.
+              El agente está tardando más de 2 minutos. Si responde, aparecerá aquí. Suele pasar cuando el proveedor de IA está
+              saturado o se acabó el cupo del plan gratuito: revisa los registros del servidor (líneas «[ai]»).
             </div>
           )}
 

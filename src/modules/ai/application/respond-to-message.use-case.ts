@@ -295,7 +295,11 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         });
         result = { ...graph };
         for (const step of graph.trace) {
-          console.log(`[ai graph] ${step.node} · ${step.type}${step.tool ? ` ${step.tool}` : ""}${step.detail ? ` — ${step.detail}` : ""}`);
+          console.log(
+            `[ai graph] ${step.node} · ${step.type}${step.tool ? ` ${step.tool}` : ""}${step.detail ? ` — ${step.detail}` : ""}${
+              step.ms !== undefined ? ` (${(step.ms / 1000).toFixed(1)} s)` : ""
+            }`,
+          );
         }
       } else {
         const simple = await this.ai.chat({
