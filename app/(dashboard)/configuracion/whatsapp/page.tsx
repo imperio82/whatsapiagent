@@ -38,7 +38,7 @@ export default function WhatsAppConfigPage(): React.ReactElement {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">WhatsApp</h1>
         <p className="text-sm text-muted-foreground">
-          Vinculá tu número para recibir y responder mensajes desde whatsAppia.
+          Vinculá tu número para recibir y responder mensajes desde Atiendo IA.
         </p>
       </div>
 

@@ -13,7 +13,7 @@ export default function AuthLayout({
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-wa text-wa-foreground">
               <MessageSquare className="h-4 w-4" strokeWidth={2.5} />
             </div>
-            <span className="text-lg font-semibold tracking-tight">whatsAppia</span>
+            <span className="text-lg font-semibold tracking-tight">Atiendo IA</span>
           </div>
           {children}
         </div>

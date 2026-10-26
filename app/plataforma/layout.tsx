@@ -20,7 +20,7 @@ export default async function PlatformLayout({ children }: { children: React.Rea
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-wa text-wa-foreground">
             <ShieldCheck className="h-4 w-4" strokeWidth={2.5} />
           </div>
-          <span className="font-semibold tracking-tight">whatsAppia · Plataforma</span>
+          <span className="font-semibold tracking-tight">Atiendo IA · Plataforma</span>
           <span className="hidden text-xs text-muted-foreground sm:inline">{session?.user?.email}</span>
           <Button asChild variant="ghost" size="sm" className="ml-auto">
             <Link href="/">

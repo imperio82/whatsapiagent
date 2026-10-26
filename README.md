@@ -1,4 +1,4 @@
-# whatsAppia
+# Atiendo IA
 
 CRM multi-tenant para vender por WhatsApp. Gestiona pedidos, leads y conversaciones con IA, basado en el flujo del Diagrama1.
 

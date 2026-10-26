@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "whatsAppia · CRM por WhatsApp",
+  title: "Atiendo IA · CRM y agente de ventas por WhatsApp",
   description: "CRM multi-tenant para gestionar ventas, pedidos y leads por WhatsApp",
 };
 

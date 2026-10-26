@@ -19,7 +19,7 @@ import { EXTRA_CHAT_COP, PLANS, PLAN_TIERS, TRIAL_DAYS } from "@modules/billing/
 import { cn } from "@lib/utils";
 
 export const metadata: Metadata = {
-  title: "whatsAppia · Tu vendedor de WhatsApp con IA",
+  title: "Atiendo IA · Tu vendedor de WhatsApp con IA",
   description:
     "Un agente de IA que atiende a tus clientes por WhatsApp las 24 horas con tu catálogo real, toma pedidos y te pasa los clientes listos para cerrar.",
 };
@@ -108,7 +108,7 @@ export default function LandingPage(): React.ReactElement {
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-wa text-wa-foreground">
               <MessageSquare className="h-4 w-4" strokeWidth={2.5} />
             </div>
-            <span className="text-lg font-semibold tracking-tight">whatsAppia</span>
+            <span className="text-lg font-semibold tracking-tight">Atiendo IA</span>
           </Link>
           <nav className="hidden gap-5 text-sm text-muted-foreground md:flex">
             <a href="#beneficios" className="hover:text-foreground">Beneficios</a>
@@ -323,7 +323,7 @@ export default function LandingPage(): React.ReactElement {
       </main>
 
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} whatsAppia · CRM y agente de ventas por WhatsApp
+        © {new Date().getFullYear()} Atiendo IA · CRM y agente de ventas por WhatsApp
       </footer>
     </div>
   );

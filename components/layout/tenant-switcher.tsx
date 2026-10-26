@@ -47,7 +47,7 @@ export function TenantSwitcher({
       </div>
       <div className="min-w-0 flex-1 text-left">
         <div className="truncate text-sm font-semibold">{switching ? "Cambiando…" : tenantName}</div>
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">whatsAppia</div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Atiendo IA</div>
       </div>
     </>
   );

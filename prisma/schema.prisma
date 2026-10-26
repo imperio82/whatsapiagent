@@ -1,4 +1,4 @@
-// whatsAppia - CRM multi-tenant por WhatsApp
+// Atiendo IA - CRM multi-tenant por WhatsApp
 // Schema modelo: todas las entidades de negocio incluyen tenantId
 // para aislamiento por negocio. RBAC granular con permisos por recurso.
 
