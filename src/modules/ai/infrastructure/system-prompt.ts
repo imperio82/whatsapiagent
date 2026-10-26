@@ -43,14 +43,13 @@ function section(title: string, value: string | null): string {
     : `\n${title}: (no configurado; si preguntan, dilo y ofrece pasar con una persona)\n`;
 }
 
-/** Quién eres, fecha y hora, con quién hablas y la información del negocio. */
+/**
+ * Quién eres y la información y reglas del negocio: lo que no cambia entre turnos ni entre clientes.
+ * Va al comienzo del prompt para que el proveedor de IA reutilice su caché (los tokens en caché cuestan
+ * mucho menos y se procesan más rápido); lo que cambia en cada turno va al final, en buildTurnContext.
+ */
 export function buildBusinessContext(input: SystemPromptInput): string {
   const name = input.agentName ?? `el asistente de ${input.businessName}`;
-  const now = (input.now ?? new Date()).toLocaleString("es-CO", {
-    timeZone: TIME_ZONE,
-    dateStyle: "full",
-    timeStyle: "short",
-  });
   const brokerage = input.profile === "BROKERAGE";
 
   const role = input.agentRole?.trim();
@@ -58,9 +57,7 @@ export function buildBusinessContext(input: SystemPromptInput): string {
 
   return `Eres ${name}${role ? `, ${role}` : ""}. Atiendes clientes por WhatsApp en nombre de "${input.businessName}"${
     input.industry ? ` (${input.industry})` : ""
-  }, un negocio en Colombia. Hoy es ${now} (hora de Colombia).${
-    input.clientName ? `\nEstás hablando con ${input.clientName}.` : ""
-  }${
+  }, un negocio en Colombia.${
     personality
       ? `
 
@@ -73,8 +70,18 @@ INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté 
     input.restrictions ? `
 ${input.restrictions}
 ` : ""
-  }${
-    input.clientProfile ? `\n${input.clientProfile}\n` : ""
+  }`;
+}
+
+/** Fecha y hora, con quién hablas y lo que ya se sabe de él: cambia en cada turno, va al final del prompt. */
+export function buildTurnContext(input: SystemPromptInput): string {
+  const now = (input.now ?? new Date()).toLocaleString("es-CO", {
+    timeZone: TIME_ZONE,
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+  return `SITUACIÓN ACTUAL:\nHoy es ${now} (hora de Colombia).${input.clientName ? `\nEstás hablando con ${input.clientName}.` : ""}${
+    input.clientProfile ? `\n\n${input.clientProfile}` : ""
   }`;
 }
 
@@ -111,7 +118,9 @@ ${specialists.comprador!.rules}
 SI EL CLIENTE QUIERE VENDER O CONSIGNAR:
 ${specialists.vendedor!.rules}
 
-${COMMON_RULES}`;
+${COMMON_RULES}
+
+${buildTurnContext(input)}`;
   }
   return `${buildBusinessContext(input)}
 OBJETIVO: ayudar al cliente a encontrar productos, cotizar y confirmar su compra. Busca cerrar la venta, pero sin presionar.
@@ -126,5 +135,7 @@ REGLAS:
 7. Si el cliente está molesto o pide hablar con una persona, dile que lo pasas con alguien del equipo.
 8. Si el cliente solo está consultando, responde sin insistir en la venta y deja la puerta abierta.
 
-${COMMON_RULES}`;
+${COMMON_RULES}
+
+${buildTurnContext(input)}`;
 }
