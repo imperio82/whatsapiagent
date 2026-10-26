@@ -219,10 +219,11 @@ export async function runSalesGraph(input: {
   // ── especialista: ciclo razonar → herramientas → responder ──────────────
   // Cada especialista del perfil con sus herramientas; el nodo elige según la intención
   const bound = new Map(
-    Object.entries(profile.specialists).map(([name, spec]) => [
-      name,
-      model.bindTools!(spec.tools.flatMap((t) => (lcTools.has(t) ? [lcTools.get(t)!] : []))),
-    ]),
+    Object.entries(profile.specialists).map(([name, spec]) => {
+      // Con los permisos del negocio un especialista puede quedar sin herramientas: responde solo con el contexto
+      const available = spec.tools.flatMap((t) => (lcTools.has(t) ? [lcTools.get(t)!] : []));
+      return [name, available.length > 0 ? model.bindTools!(available) : model];
+    }),
   );
 
   async function specialist(state: GraphState): Promise<Partial<GraphState>> {

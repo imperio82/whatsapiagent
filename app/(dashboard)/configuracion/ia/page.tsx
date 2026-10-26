@@ -11,6 +11,7 @@ import {
   Clock,
   GraduationCap,
   Info,
+  ShieldCheck,
   ListChecks,
   ShoppingBag,
   Sparkles,
@@ -23,11 +24,13 @@ import { Input } from "@components/ui/input";
 import { Label } from "@components/ui/label";
 import { Switch } from "@components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@components/ui/dialog";
+import { AgentPermissionsForm } from "@components/features/agent/agent-permissions-form";
 import { AgentSkills } from "@components/features/agent/agent-skills";
 import { AgentVoice } from "@components/features/agent/agent-voice";
 import { BusinessKnowledgeForm } from "@components/features/agent/business-knowledge-form";
 import { TrainAgentForm } from "@components/features/agent/train-agent-form";
 import { useCurrentTenant, useUpdateTenant } from "@hooks/use-tenant";
+import { AGENT_RESOURCES, agentPermissionsFrom, resourcesFor } from "@modules/ai/domain/agent-permissions";
 
 type Profile = "RETAIL" | "BROKERAGE";
 
@@ -50,7 +53,7 @@ const REPLY_DELAY_PRESETS = [
   { value: "20", label: "20 s" },
 ] as const;
 
-type Section = "entrenar" | "negocio" | "habilidades" | "voz";
+type Section = "entrenar" | "negocio" | "habilidades" | "permisos" | "voz";
 
 /** Qué se abre en el modal de cada tarjeta y cómo de ancho. */
 const SECTION_DIALOG: Record<Section, { title: string; description: string; width: string }> = {
@@ -71,6 +74,12 @@ const SECTION_DIALOG: Record<Section, { title: string; description: string; widt
     description:
       "Cómo trata al cliente, qué puede y no puede hacer, qué preguntas hace y cuándo pasa la conversación a una persona. Los cambios aplican desde el siguiente mensaje.",
     width: "sm:max-w-5xl",
+  },
+  permisos: {
+    title: "Permisos del agente",
+    description:
+      "Qué puede consultar, actualizar o crear el agente en cada área. Así controlas, por ejemplo, que cotice pero no cree pedidos, o que consulte la agenda sin agendar visitas.",
+    width: "sm:max-w-3xl",
   },
   voz: {
     title: "Voz del agente",
@@ -153,6 +162,13 @@ export default function MyAgentPage(): React.ReactElement {
   const knowledgeCount = [tenant.description, tenant.businessHours, tenant.deliveryInfo, tenant.paymentInfo, tenant.faq].filter(
     (v) => v?.trim(),
   ).length;
+  // Los permisos se muestran con el tipo de negocio guardado, igual que en su formulario
+  const savedProfile = tenant.agentProfile ?? "RETAIL";
+  const permissions = agentPermissionsFrom(tenant.aiPermissions, savedProfile);
+  const limited = resourcesFor(savedProfile).filter((r) => {
+    const levels = AGENT_RESOURCES[r].levels[savedProfile]!;
+    return permissions[r] !== levels[levels.length - 1];
+  });
   const trained = !!(tenant.aiAgentName?.trim() || tenant.aiAgentRole?.trim() || tenant.aiPersonality?.trim());
 
   return (
@@ -350,6 +366,15 @@ export default function MyAgentPage(): React.ReactElement {
           text="Qué puede y no puede decir, preguntas para calificar, cuándo pasar a una persona y el trato."
         />
         <SectionCard
+          onOpen={() => setSection("permisos")}
+          icon={ShieldCheck}
+          title="Permisos del agente"
+          status={limited.length === 0 ? "Acceso completo" : `${limited.length} ${limited.length === 1 ? "área limitada" : "áreas limitadas"}`}
+          text={`Lectura, actualización o escritura en ${resourcesFor(savedProfile)
+            .map((r) => AGENT_RESOURCES[r].label[savedProfile].toLowerCase())
+            .join(", ")}.`}
+        />
+        <SectionCard
           onOpen={() => setSection("voz")}
           icon={AudioLines}
           title="Voz del agente"
@@ -367,6 +392,7 @@ export default function MyAgentPage(): React.ReactElement {
             {section === "entrenar" && <TrainAgentForm onSaved={() => setSection(null)} />}
             {section === "negocio" && <BusinessKnowledgeForm onSaved={() => setSection(null)} />}
             {section === "habilidades" && <AgentSkills embedded />}
+            {section === "permisos" && <AgentPermissionsForm onSaved={() => setSection(null)} />}
             {section === "voz" && <AgentVoice embedded />}
           </DialogContent>
         )}

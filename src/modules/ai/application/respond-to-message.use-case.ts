@@ -10,6 +10,7 @@ import { loadActiveRules } from "../infrastructure/ai-rules";
 import { GRAPH_PROFILES } from "../infrastructure/graph/profiles";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
 import { formatClientProfile, resumeNote } from "../domain/client-memory";
+import { agentPermissionsFrom, filterToolsByPermissions, hasPermission, permissionRestrictions } from "../domain/agent-permissions";
 import { aiBudgetExhausted } from "@modules/billing/application/usage";
 import { decideVoiceReply, type VoiceDecision } from "@modules/voice/domain/voice-policy";
 import { loadVoiceSettings, logVoiceUsage, saveClip, synthesizeReply, type VoiceSettings } from "@modules/voice/application/voice-runtime";
@@ -185,8 +186,14 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       };
     });
 
+    // Permisos del agente: lo que el negocio no le deja leer no entra a su contexto
+    const profile = tenant.agentProfile;
+    const permissions = agentPermissionsFrom(tenant.aiPermissions, profile);
+    const readsClient = hasPermission(permissions, "clients", "read");
+    const readsOrders = hasPermission(permissions, "orders", "read");
+
     // Memoria entre conversaciones: ficha del cliente, lo que ha contado y sus últimos pedidos
-    const recentOrders = conversation.clientId
+    const recentOrders = conversation.clientId && readsOrders
       ? await prisma.order.findMany({
           where: { tenantId, clientId: conversation.clientId },
           orderBy: { createdAt: "desc" },
@@ -194,13 +201,13 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           include: { items: { select: { quantity: true, productNameSnap: true } } },
         })
       : [];
-    const clientProfile = conversation.client
+    const clientProfile = conversation.client && (readsClient || recentOrders.length > 0)
       ? formatClientProfile({
-          name: conversation.client.name,
-          address: conversation.client.address,
-          city: conversation.client.city,
-          email: conversation.client.email,
-          aiMemory: conversation.client.aiMemory,
+          name: readsClient ? conversation.client.name : "",
+          address: readsClient ? conversation.client.address : null,
+          city: readsClient ? conversation.client.city : null,
+          email: readsClient ? conversation.client.email : null,
+          aiMemory: readsClient ? conversation.client.aiMemory : null,
           orders: recentOrders.map((o) => ({
             code: o.code,
             createdAt: o.createdAt,
@@ -212,9 +219,8 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       : null;
 
     // Intermediación: lo que el comprador ya respondió, para no volver a preguntarlo
-    const profile = tenant.agentProfile;
     const buyerLead =
-      profile === "BROKERAGE" && conversation.clientId
+      profile === "BROKERAGE" && conversation.clientId && hasPermission(permissions, "leads", "read")
         ? await prisma.lead.findFirst({
             where: { tenantId, clientId: conversation.clientId, leadType: "BUYER", stage: { notIn: ["CUSTOMER", "LOST"] } },
             orderBy: { updatedAt: "desc" },
@@ -234,7 +240,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     const clientSentAudio = last.type === "AUDIO";
 
     // Los clientes creados automáticamente se llaman "Cliente 1234": ese nombre no sirve para saludar
-    const clientName = conversation.client?.name;
+    const clientName = readsClient ? conversation.client?.name : null;
     const promptInput: SystemPromptInput = {
       profile,
       rules,
@@ -249,6 +255,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       agentName: tenant.aiAgentName ?? undefined,
       agentRole: tenant.aiAgentRole,
       personality: tenant.aiPersonality,
+      restrictions: permissionRestrictions(permissions, profile),
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
       clientProfile: [clientProfile, qualification].filter(Boolean).join("\n\n") || null,
     };
@@ -258,7 +265,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       clientId: conversation.clientId,
       waChatId: conversation.waChatId,
     };
-    const tools =
+    const allTools =
       profile === "BROKERAGE"
         ? buildBrokerageTools(tenantId, {
             ...toolContext,
@@ -269,6 +276,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
               : undefined,
           })
         : buildTools(tenantId, toolContext);
+    const tools = filterToolsByPermissions(allTools, permissions);
 
     const engine = aiEngine();
     console.log(
