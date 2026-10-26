@@ -4,6 +4,7 @@ import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-p
 import { sendProactiveMessage } from "@modules/conversations/application/send-proactive";
 import { MatchingService } from "@modules/matching/application/matching.service";
 import { SchedulingService } from "@modules/integrations/application/scheduling.service";
+import { sendConfirmationNotice } from "@modules/appointments/application/confirmation-notice";
 import type { AITool } from "../domain/ports/ai-provider";
 import { appendMemory, isGenericClientName } from "../domain/client-memory";
 import { findListing, formatCop } from "./brokerage-tools";
@@ -509,13 +510,19 @@ export function buildAdvisorTools(tenantId: string, ctx: AdvisorToolContext): AI
           synced: false,
           error: err instanceof Error ? err.message : "error del calendario",
         }));
+        const notice = await sendConfirmationNotice(ctx.whatsapp, tenantId, appointment.id, appointment, ctx.userId);
         return json({
           ok: true,
           cliente: clientLabel(found.client),
           estado: status === "CONFIRMED" ? "confirmada" : status === "CANCELLED" ? "cancelada" : "realizada",
           fecha: when(scheduledAt ?? appointment.scheduledAt),
           calendario: sync.synced ? "actualizado" : sync.error ? `no se pudo actualizar: ${sync.error}` : "sin calendario conectado",
-          recordatorio: "Avísale al cliente si hace falta (message_client).",
+          avisoAlCliente:
+            notice.status === "sent"
+              ? "ya se le envió la confirmación con el día y la hora; no se la repitas"
+              : notice.status === "failed"
+                ? `no se pudo enviar (${notice.error}); ofrece avisarle con message_client`
+                : "no se envió aviso automático; avísale con message_client si hace falta",
         });
       },
     },

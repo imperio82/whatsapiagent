@@ -1,3 +1,4 @@
+import { getWhatsAppProvider } from "@modules/whatsapp/infrastructure/provider-factory";
 import {
   ListAppointmentsUseCase,
   UpdateAppointmentUseCase,
@@ -7,7 +8,7 @@ import {
 
 export class AppointmentsController {
   private readonly listUC = new ListAppointmentsUseCase();
-  private readonly updateUC = new UpdateAppointmentUseCase();
+  private readonly updateUC = new UpdateAppointmentUseCase(getWhatsAppProvider());
 
   list(): Promise<AppointmentDto[]> {
     return this.listUC.execute();

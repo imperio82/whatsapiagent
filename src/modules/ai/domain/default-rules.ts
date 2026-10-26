@@ -23,6 +23,9 @@ export const RULE_CATEGORY_LABELS: Record<AiRuleCategoryValue, string> = {
   HANDOFF: "Cuándo pasar a una persona",
 };
 
+/** Habilidad que además de ir en el prompt activa el aviso automático al confirmar una cita. */
+export const VISIT_CONFIRMATION_RULE_KEY = "brokerage.visit-confirmation";
+
 const RETAIL_RULES: DefaultRule[] = [
   {
     systemKey: "retail.tone",
@@ -99,6 +102,14 @@ const BROKERAGE_RULES: DefaultRule[] = [
     content:
       "Las visitas a inmuebles y las pruebas de manejo se hacen de lunes a viernes de 8:00 a. m. a 5:00 p. m. y los sábados " +
       "de 9:00 a. m. a 1:00 p. m. Propón máximo dos opciones y deja la cita como solicitud: un asesor confirma la hora y el lugar.",
+  },
+  {
+    systemKey: VISIT_CONFIRMATION_RULE_KEY,
+    category: "POLICY",
+    title: "Avisar al cliente cuando se confirma la cita",
+    content:
+      "Cuando una visita o prueba de manejo quede confirmada o cambie de hora, el cliente recibe un mensaje con el bien, el día y la hora. " +
+      "Si la confirma un asesor desde el panel o por WhatsApp, el aviso sale solo; no lo repitas.",
   },
   {
     systemKey: "brokerage.q.need",
