@@ -30,15 +30,15 @@ Hacerlo **después del punto 1**, cuando la IA ya responda:
 
 ## 4. Dominio y nombre de la marca
 
-- [ ] Elegir el nombre. Candidato: **AtiendoSell** (alternativa en español: `atiendoia.com`). La marca no puede contener "WhatsApp", "Whats" ni "wa", porque Meta lo prohíbe.
-- [ ] Confirmar la disponibilidad en el registrador y comprar `atiendosell.com` como dominio principal y `atiendosell.app` como secundario, que redirige al principal.
+- [x] Elegir el nombre: **Atiendo IA**. La marca no puede contener "WhatsApp", "Whats" ni "wa", porque Meta lo prohíbe. Ya cambiado en la app.
+- [ ] Confirmar la disponibilidad en el registrador y comprar `atiendoia.com`: el dominio principal para la landing (`F:\projectsme\atiendoia-web`) y `app.atiendoia.com` para la app.
 - [ ] Buscar el nombre en la SIC (Colombia) y registrar la marca.
 - [ ] Conectar el dominio a Railway:
   - [ ] *Settings → Networking → Custom Domain* en Railway, y el `CNAME` que indique Railway en el DNS del registrador.
   - [ ] Actualizar `AUTH_URL` y `NEXT_PUBLIC_APP_URL` con el dominio nuevo.
   - [ ] En Meta (*WhatsApp → Configuración*), cambiar la URL del webhook a `https://<dominio>/api/v1/whatsapp/webhook`. Hoy apunta a la URL de Railway. Si se usa Twilio, su webhook es `/api/v1/whatsapp/twilio/webhook`.
   - [ ] Si se usa el login o la integración con Google, agregar el dominio nuevo a las URIs de redirección autorizadas en Google Cloud.
-- [ ] Cambiar el nombre visible "whatsAppia" en la interfaz, el título de la página y los correos.
+- [x] Cambiar el nombre visible "whatsAppia" por "Atiendo IA" en la interfaz y el título de la página.
 
 ## 5. Revisar
 
