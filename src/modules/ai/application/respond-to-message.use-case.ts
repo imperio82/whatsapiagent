@@ -2,7 +2,7 @@ import type { UseCase } from "@shared/domain/use-case";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import type { AIProvider, ChatMessage, ChatTurnOutput } from "../domain/ports/ai-provider";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
-import { buildBusinessContext, buildSystemPrompt, type SystemPromptInput } from "../infrastructure/system-prompt";
+import { buildBusinessContext, buildSystemPrompt, buildTurnContext, type SystemPromptInput } from "../infrastructure/system-prompt";
 import { runSalesGraph, type TraceStep } from "../infrastructure/graph/sales-graph";
 import { buildTools } from "../infrastructure/tools";
 import { buildBrokerageTools, formatLeadQualification } from "../infrastructure/brokerage-tools";
@@ -63,6 +63,8 @@ interface TurnResult extends ChatTurnOutput {
   handoff?: boolean;
   trace?: TraceStep[];
   delivery?: VoiceDecision;
+  /** De tokensIn, los servidos desde la caché del proveedor */
+  cachedTokensIn?: number;
 }
 
 const TEXT_ONLY: VoiceDecision = { voice: false, alsoText: false, reason: "por texto" };
@@ -287,6 +289,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       if (engine === "graph") {
         const graph = await runSalesGraph({
           businessContext: buildBusinessContext(promptInput),
+          turnContext: buildTurnContext(promptInput),
           history: chatHistory,
           tools,
           profile: GRAPH_PROFILES[profile],
@@ -295,7 +298,11 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         });
         result = { ...graph };
         for (const step of graph.trace) {
-          console.log(`[ai graph] ${step.node} · ${step.type}${step.tool ? ` ${step.tool}` : ""}${step.detail ? ` — ${step.detail}` : ""}`);
+          console.log(
+            `[ai graph] ${step.node} · ${step.type}${step.tool ? ` ${step.tool}` : ""}${step.detail ? ` — ${step.detail}` : ""}${
+              step.ms !== undefined ? ` (${(step.ms / 1000).toFixed(1)} s)` : ""
+            }`,
+          );
         }
       } else {
         const simple = await this.ai.chat({
@@ -323,7 +330,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       return;
     }
     console.log(
-      `[ai respond] IA respondió: tools=${result.toolCallsUsed}, tokensIn=${result.tokensIn}, tokensOut=${result.tokensOut}, textLen=${result.text.length}`,
+      `[ai respond] IA respondió: tools=${result.toolCallsUsed}, tokensIn=${result.tokensIn} (en caché ${result.cachedTokensIn ?? 0}), tokensOut=${result.tokensOut}, textLen=${result.text.length}`,
     );
 
     // 2.3 — registramos el uso (tokens + costo estimado) por conversación.

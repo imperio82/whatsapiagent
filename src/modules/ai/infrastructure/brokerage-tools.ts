@@ -44,8 +44,8 @@ function attributesText(attributes: Prisma.JsonValue | null): string {
 
 /** Lo que el comprador puede saber del bien. Sin datos del propietario. */
 function publicListing(l: ListingRow, withPhotos: boolean) {
+  // Sin el id interno: el agente se refiere a los bienes por nombre o código (findListing acepta ambos)
   return {
-    id: l.id,
     code: l.code,
     title: l.title,
     kind: l.kind,

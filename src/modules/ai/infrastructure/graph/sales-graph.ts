@@ -50,6 +50,8 @@ export interface TraceStep {
 
 interface Usage {
   tokensIn: number;
+  /** De tokensIn, los que el proveedor sirvió desde su caché (más baratos y rápidos) */
+  cachedTokensIn: number;
   tokensOut: number;
   toolCalls: number;
 }
@@ -60,6 +62,7 @@ export interface GraphTurnResult {
   handoff: boolean;
   trace: TraceStep[];
   tokensIn: number;
+  cachedTokensIn: number;
   tokensOut: number;
   toolCallsUsed: number;
   model: string;
@@ -91,10 +94,11 @@ const State = Annotation.Root({
   usage: Annotation<Usage>({
     reducer: (a, b) => ({
       tokensIn: a.tokensIn + b.tokensIn,
+      cachedTokensIn: a.cachedTokensIn + b.cachedTokensIn,
       tokensOut: a.tokensOut + b.tokensOut,
       toolCalls: a.toolCalls + b.toolCalls,
     }),
-    default: () => ({ tokensIn: 0, tokensOut: 0, toolCalls: 0 }),
+    default: () => ({ tokensIn: 0, cachedTokensIn: 0, tokensOut: 0, toolCalls: 0 }),
   }),
 });
 type GraphState = typeof State.State;
@@ -145,7 +149,12 @@ function textOf(message: BaseMessage): string {
 
 function usageOf(message: BaseMessage): Usage {
   const u = (message as AIMessage).usage_metadata;
-  return { tokensIn: u?.input_tokens ?? 0, tokensOut: u?.output_tokens ?? 0, toolCalls: 0 };
+  return {
+    tokensIn: u?.input_tokens ?? 0,
+    cachedTokensIn: u?.input_token_details?.cache_read ?? 0,
+    tokensOut: u?.output_tokens ?? 0,
+    toolCalls: 0,
+  };
 }
 
 function truncate(text: string, max = 400): string {
@@ -153,7 +162,10 @@ function truncate(text: string, max = 400): string {
 }
 
 export async function runSalesGraph(input: {
+  /** Lo fijo del negocio (va al comienzo del prompt, para aprovechar la caché del proveedor) */
   businessContext: string;
+  /** Lo que cambia en cada turno: fecha, cliente y su ficha (va al final del prompt) */
+  turnContext?: string;
   history: ChatMessage[];
   tools: AITool[];
   /** Perfil del negocio; por defecto, tienda. */
@@ -181,6 +193,7 @@ export async function runSalesGraph(input: {
   ]
     .filter(Boolean)
     .join("\n");
+  const turnContext = input.turnContext ? `\n\n${input.turnContext}` : "";
   // Lo que escribió el cliente: los montos que dio (presupuesto, oferta) se pueden repetir
   const clientText = input.history.filter((m) => m.role === "user").map((m) => m.content).join("\n");
 
@@ -235,17 +248,18 @@ export async function runSalesGraph(input: {
       ? `\n\nCORRECCIÓN OBLIGATORIA: tu respuesta anterior se rechazó porque ${state.correction} Vuelve a consultar las herramientas y usa solo sus datos.`
       : "";
     const messages: BaseMessage[] = [
-      new SystemMessage(`${input.businessContext}\n${spec.rules}\n\n${COMMON_RULES}${correction}`),
+      new SystemMessage(`${input.businessContext}\n${spec.rules}\n\n${COMMON_RULES}${turnContext}${correction}`),
       ...state.messages,
     ];
     const trace: TraceStep[] = [];
     const outputs: string[] = [];
-    const usage: Usage = { tokensIn: 0, tokensOut: 0, toolCalls: 0 };
+    const usage: Usage = { tokensIn: 0, cachedTokensIn: 0, tokensOut: 0, toolCalls: 0 };
 
     for (let step = 0; step < MAX_TOOL_STEPS; step++) {
       const ai = (await withTools.invoke(messages)) as AIMessage;
       const u = usageOf(ai);
       usage.tokensIn += u.tokensIn;
+      usage.cachedTokensIn += u.cachedTokensIn;
       usage.tokensOut += u.tokensOut;
       messages.push(ai);
 
@@ -296,7 +310,8 @@ export async function runSalesGraph(input: {
   function verificador(state: GraphState): Partial<GraphState> {
     const result = verifyReply(state.reply, {
       toolOutputs: state.toolOutputs,
-      businessContext: input.businessContext,
+      // La ficha del cliente (pedidos anteriores) también es evidencia válida de códigos y precios
+      businessContext: `${input.businessContext}${turnContext}`,
       clientText,
     });
     const step: TraceStep = {
@@ -381,6 +396,7 @@ export async function runSalesGraph(input: {
     handoff: final.handoff,
     trace: final.trace,
     tokensIn: final.usage.tokensIn,
+    cachedTokensIn: final.usage.cachedTokensIn,
     tokensOut: final.usage.tokensOut,
     toolCallsUsed: final.usage.toolCalls,
     model: modelName,
