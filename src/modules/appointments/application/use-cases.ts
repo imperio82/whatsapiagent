@@ -4,6 +4,8 @@ import { TenantContext } from "@shared/application/tenant-context";
 import { NotFoundError } from "@shared/domain/errors";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { SchedulingService } from "@modules/integrations/application/scheduling.service";
+import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
+import { sendConfirmationNotice } from "./confirmation-notice";
 
 /**
  * Visitas y pruebas de manejo que la IA deja como solicitud. Un asesor las confirma con fecha
@@ -41,6 +43,8 @@ export interface AppointmentDto {
   advisor: { id: string; name: string } | null;
   /** Si el cambio no se pudo llevar al calendario, el motivo (la cita igual quedó guardada). */
   calendarError?: string;
+  /** Aviso de confirmación al cliente: "sent" si salió, o el motivo si falló. Ausente si no aplicaba. */
+  clientNotice?: { sent: true } | { sent: false; error: string };
   createdAt: string;
 }
 
@@ -91,11 +95,14 @@ export class ListAppointmentsUseCase {
 }
 
 export class UpdateAppointmentUseCase {
-  constructor(private readonly scheduling = new SchedulingService()) {}
+  constructor(
+    private readonly whatsapp: WhatsAppProvider,
+    private readonly scheduling = new SchedulingService(),
+  ) {}
 
   async execute(id: string, input: UpdateAppointmentInput): Promise<AppointmentDto> {
     authorize("leads.update");
-    const { tenantId } = TenantContext.require();
+    const { tenantId, userId } = TenantContext.require();
     const existing = await prisma.appointment.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundError("Cita no encontrada");
     const updated = await prisma.appointment.update({
@@ -111,6 +118,12 @@ export class UpdateAppointmentUseCase {
     const touchesCalendar = input.status !== undefined || input.scheduledAt !== undefined;
     const sync = touchesCalendar ? await this.scheduling.syncFromPanel(tenantId, id) : { synced: false };
     const fresh = sync.synced ? await prisma.appointment.findUniqueOrThrow({ where: { id }, include }) : updated;
-    return { ...toDto(fresh), ...(sync.error ? { calendarError: sync.error } : {}) };
+    const notice = await sendConfirmationNotice(this.whatsapp, tenantId, id, existing, userId);
+    return {
+      ...toDto(fresh),
+      ...(sync.error ? { calendarError: sync.error } : {}),
+      ...(notice.status === "sent" ? { clientNotice: { sent: true } } : {}),
+      ...(notice.status === "failed" ? { clientNotice: { sent: false, error: notice.error } } : {}),
+    };
   }
 }
