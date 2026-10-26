@@ -11,7 +11,7 @@ import { monthDayKeys, renderGreeting, templateKeyFor, templatesFrom } from "@mo
  *
  * Cada día (y el anterior, para que el asesor alcance a revisarlas) se preparan las
  * felicitaciones de las fechas que caen, con el mensaje de la plantilla del negocio:
- * - Modo APPROVAL (por defecto): quedan en el panel → Felicitaciones para aprobar, editar o descartar.
+ * - Modo APPROVAL (por defecto): quedan en el panel → Recordatorios → Felicitaciones para aprobar, editar o descartar.
  * - Modo AUTO: salen solas el mismo día, en horario de 9 a. m. a 7 p. m.
  * Lo que no se aprueba en 3 días se descarta solo, para que la bandeja no se llene de fechas viejas.
  */
@@ -108,7 +108,7 @@ export class GreetingsService {
         tomorrow.get(t.id)?.length ? `mañana: ${list(tomorrow.get(t.id)!)}` : null,
       ].filter(Boolean);
       const action = t.greetingMode === "AUTO" ? "Los mensajes salen solos el día de la fecha; puedes editarlos antes" : "Revisa y aprueba los mensajes";
-      const text = `🎂 Fechas especiales de tus clientes (${parts.join(" · ")}). ${action} en el panel → Felicitaciones.`;
+      const text = `🎂 Fechas especiales de tus clientes (${parts.join(" · ")}). ${action} en el panel → Recordatorios.`;
       await this.whatsapp.sendText(t.id, { to: t.ownerNotifyPhone!, text }).catch((err) => console.warn("[greetings] aviso al dueño:", err));
     }
   }

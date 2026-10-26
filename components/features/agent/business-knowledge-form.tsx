@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "@components/ui/button";
-import { Card, CardContent } from "@components/ui/card";
 import { Label } from "@components/ui/label";
 import { useCurrentTenant, useUpdateTenant } from "@hooks/use-tenant";
 
@@ -76,7 +74,8 @@ const BROKERAGE_FIELDS: Partial<Record<ContextKey, { label: string; placeholder:
   },
 };
 
-export default function AgentKnowledgePage(): React.ReactElement {
+/** Lo que el agente sabe del negocio. Va dentro del modal de Mi agente. */
+export function BusinessKnowledgeForm({ onSaved }: { onSaved?: () => void }): React.ReactElement {
   const { data: tenant, isLoading } = useCurrentTenant();
   const update = useUpdateTenant();
   const [context, setContext] = useState<Record<ContextKey, string>>({
@@ -106,6 +105,7 @@ export default function AgentKnowledgePage(): React.ReactElement {
   function save() {
     update.mutate(
       Object.fromEntries(CONTEXT_FIELDS.map((f) => [f.key, context[f.key].trim() || null])) as Record<ContextKey, string | null>,
+      { onSuccess: onSaved },
     );
   }
 
@@ -113,42 +113,27 @@ export default function AgentKnowledgePage(): React.ReactElement {
   const fields = CONTEXT_FIELDS.map((f) => ({ ...f, ...(brokerage ? BROKERAGE_FIELDS[f.key] : {}) }));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link href="/configuracion/ia" className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-3 w-3" /> Mi agente
-        </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Lo que el agente sabe de tu negocio</h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          El agente responde solo con lo que escribas aquí y con tu {brokerage ? "inventario" : "catálogo"}. Lo que no esté,
-          no lo inventa: lo pasa a una persona. Los cambios aplican desde el siguiente mensaje que llegue.
-        </p>
+    <div className="space-y-4">
+      {fields.map((f) => (
+        <div key={f.key} className="space-y-1.5">
+          <Label htmlFor={f.key}>{f.label}</Label>
+          <textarea
+            id={f.key}
+            rows={f.rows}
+            className={TEXTAREA}
+            value={context[f.key]}
+            onChange={(e) => setContext((c) => ({ ...c, [f.key]: e.target.value }))}
+            placeholder={f.placeholder}
+          />
+          <p className="text-xs text-muted-foreground">{f.help}</p>
+        </div>
+      ))}
+
+      <div className="flex justify-end pt-2">
+        <Button onClick={save} disabled={update.isPending}>
+          <Sparkles className="h-4 w-4" /> Guardar cambios
+        </Button>
       </div>
-
-      <Card>
-        <CardContent className="space-y-4 p-6">
-          {fields.map((f) => (
-            <div key={f.key} className="space-y-1.5">
-              <Label htmlFor={f.key}>{f.label}</Label>
-              <textarea
-                id={f.key}
-                rows={f.rows}
-                className={TEXTAREA}
-                value={context[f.key]}
-                onChange={(e) => setContext((c) => ({ ...c, [f.key]: e.target.value }))}
-                placeholder={f.placeholder}
-              />
-              <p className="text-xs text-muted-foreground">{f.help}</p>
-            </div>
-          ))}
-
-          <div className="flex justify-end pt-2">
-            <Button onClick={save} disabled={update.isPending}>
-              <Sparkles className="h-4 w-4" /> Guardar cambios
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
