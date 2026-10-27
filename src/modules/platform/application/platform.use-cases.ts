@@ -7,6 +7,7 @@ import {
   PLANS,
   PLAN_TIERS,
   extendPaidUntil,
+  limitsPlan,
   metaServiceCostCop,
   monthKey,
   monthPeriod,
@@ -206,7 +207,8 @@ export class GetPlatformOverviewUseCase {
         whatsapp: t.whatsappAccount
           ? { provider: t.whatsappAccount.provider, phone: t.whatsappAccount.displayPhoneNumber, verified: t.whatsappAccount.verified }
           : null,
-        chatLimit: PLANS[t.plan].chats,
+        // Sin ningún pago del plan sigue en prueba gratis, con su cupo
+        chatLimit: limitsPlan(t.plan, t.billingEntries.length === 0).chats,
         activeChats: u.activeChats,
         budgetUsd: u.budgetMicroUsd / MICRO_USD,
         // Como en el total: solo cuenta el precio si está activo y al día

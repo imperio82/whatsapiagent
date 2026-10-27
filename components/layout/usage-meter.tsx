@@ -54,17 +54,16 @@ export function UsageMeter() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72">
           <DropdownMenuLabel className="font-normal">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Plan {data.planName} · este mes</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              {data.trial ? data.planName : `Plan ${data.planName}`} · este mes
+            </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <dl className="space-y-1.5 px-2 py-1.5 text-sm">
             <Row label="IA gastada" value={`${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`} />
             {data.creditUsd > 0 && <Row label="Créditos sumados" value={usd.format(data.creditUsd)} />}
-            <Row
-              label="Clientes atendidos"
-              value={`${int.format(data.chats)} de ${int.format(data.chatLimit)}`}
-              warn={data.chats > data.chatLimit}
-            />
+            {/* Sin "de X": el saldo se muestra como algo que se recarga, no como un cupo de clientes */}
+            <Row label="Clientes atendidos" value={int.format(data.chats)} />
             <Row label="Chats activos (24 h)" value={int.format(data.activeChats)} />
             {data.paidUntil && (
               <Row
@@ -77,8 +76,10 @@ export function UsageMeter() {
           <DropdownMenuSeparator />
           <p className="px-2 py-1.5 text-xs text-muted-foreground">
             {ratio >= 1
-              ? "Llegaste al tope del mes: recarga para que el agente siga atendiendo a los clientes nuevos."
-              : "Si llegas al tope, recarga clientes adicionales o sube de plan para que el agente siga atendiendo."}
+              ? "Se acabó el saldo del mes: recarga para que tu agente siga atendiendo sin pausas."
+              : data.trial
+                ? "Tu prueba incluye saldo para conocer el agente. Si se te acaba, recarga y sigue atendiendo."
+                : "Si se te acaba el saldo, recarga o sube de plan y tu agente sigue atendiendo."}
           </p>
           <div className="px-2 pb-2">
             <Button size="sm" variant="wa" className="w-full" onClick={() => setRecharging(true)}>

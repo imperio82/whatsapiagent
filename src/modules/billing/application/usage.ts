@@ -1,7 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { SIMULATED_DOMAIN } from "@shared/domain/wa-jid";
-import { MICRO_USD, PLANS, monthPeriod, type Period, type PlanTier } from "../domain/plans";
+import { MICRO_USD, limitsPlan, monthPeriod, type Period, type PlanTier } from "../domain/plans";
+import { isTrial, trialTenantIds } from "./trial";
 
 /** Consumo de un negocio en un mes. Los montos van en millonésimas de dólar, como en ai_usage_logs. */
 export interface TenantUsage {
@@ -47,7 +48,7 @@ export async function usageByTenant(
   const inPeriod = { gte: period.start, lt: period.end };
   const notSimulated = `%${SIMULATED_DOMAIN}`;
 
-  const [ai, voice, credits, chats, outbound, active] = await Promise.all([
+  const [ai, voice, credits, chats, outbound, active, trial] = await Promise.all([
     prisma.aiUsageLog.groupBy({
       by: ["tenantId"],
       where: { tenantId: { in: ids }, createdAt: inPeriod },
@@ -88,6 +89,7 @@ export async function usageByTenant(
       where: { tenantId: { in: ids }, lastMessageAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
       _count: { _all: true },
     }),
+    trialTenantIds(ids),
   ]);
 
   const aiBy = new Map(ai.map((r) => [r.tenantId, r]));
@@ -117,7 +119,7 @@ export async function usageByTenant(
       outboundMessages: outboundBy.get(t.id) ?? 0,
       spentMicroUsd: a?._sum.costMicroUsd ?? 0,
       creditMicroUsd,
-      budgetMicroUsd: PLANS[t.plan].aiBudgetUsd * MICRO_USD + creditMicroUsd,
+      budgetMicroUsd: limitsPlan(t.plan, trial.has(t.id)).aiBudgetUsd * MICRO_USD + creditMicroUsd,
     });
   }
   return result;
@@ -134,7 +136,7 @@ export async function tenantUsage(tenant: TenantPlanRow, now = new Date()): Prom
  */
 export async function aiBudgetExhausted(tenant: TenantPlanRow, now = new Date()): Promise<boolean> {
   const { start } = monthPeriod(null, now);
-  const [spent, credits] = await Promise.all([
+  const [spent, credits, trial] = await Promise.all([
     prisma.aiUsageLog.aggregate({
       where: { tenantId: tenant.id, createdAt: { gte: start } },
       _sum: { costMicroUsd: true },
@@ -143,7 +145,8 @@ export async function aiBudgetExhausted(tenant: TenantPlanRow, now = new Date())
       where: { tenantId: tenant.id, kind: "CREDIT", createdAt: { gte: start } },
       _sum: { creditMicroUsd: true },
     }),
+    isTrial(tenant.id),
   ]);
-  const budget = PLANS[tenant.plan].aiBudgetUsd * MICRO_USD + (credits._sum.creditMicroUsd ?? 0);
+  const budget = limitsPlan(tenant.plan, trial).aiBudgetUsd * MICRO_USD + (credits._sum.creditMicroUsd ?? 0);
   return (spent._sum.costMicroUsd ?? 0) >= budget;
 }

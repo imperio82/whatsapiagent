@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { PLANS } from "./plans";
+import { PLANS, TRIAL, limitsPlan } from "./plans";
 import { capReached, decideResponse, limitLevel, type ContactSnapshot, type LimitsSnapshot } from "./usage-limits";
 
 const USD = 1_000_000;
@@ -56,5 +56,14 @@ describe("recargas", () => {
     assert.equal(rechargeQuote("EMPRENDE", 45_000).clients, 150);
     // Saldo de IA en proporción al tope del plan: US$10 / 500 clientes = US$0,02 por cliente
     assert.equal(rechargeQuote("EMPRENDE", 30_000).creditUsd, 2);
+  });
+
+  it("la prueba gratis vale US$ 5 a precio de venta, no a costo", () => {
+    const trial = limitsPlan("PRO", true);
+    assert.equal(trial.aiBudgetUsd, 1.5);
+    assert.equal(trial.chats, TRIAL.chats);
+    // Lo que se recarga se sigue cobrando al precio del plan elegido
+    assert.equal(trial.extraChatCop, PLANS.PRO.extraChatCop);
+    assert.equal(limitsPlan("PRO", false), PLANS.PRO);
   });
 });

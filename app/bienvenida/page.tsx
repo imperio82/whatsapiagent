@@ -15,7 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@components/ui/button";
-import { EXTRA_CHAT_COP, PLANS, PLAN_TIERS, TRIAL_DAYS } from "@modules/billing/domain/plans";
+import { PLANS, PLAN_TIERS, TRIAL_DAYS } from "@modules/billing/domain/plans";
 import { cn } from "@lib/utils";
 
 export const metadata: Metadata = {
@@ -83,7 +83,7 @@ const FAQ = [
   },
   {
     q: "¿Qué cuenta como un cliente atendido?",
-    a: `Cada persona distinta a la que el agente le responde en el mes, sin importar cuántos mensajes mande. Te avisamos al 70 % y al 90 % del cupo. Si lo pasas, recargas clientes adicionales desde ${cop.format(EXTRA_CHAT_COP)} cada uno o subes de plan, y ningún cliente se queda sin respuesta: los chats abiertos siguen con el agente y los nuevos pasan a tu equipo.`,
+    a: `Cada persona distinta a la que el agente le responde en el mes, sin importar cuántos mensajes mande. Te avisamos antes de que se acabe el saldo del mes. Si necesitas más, recargas el monto que quieras o subes de plan, y ningún cliente se queda sin respuesta: los chats abiertos siguen con el agente y los nuevos pasan a tu equipo.`,
   },
   {
     q: "¿Qué pasa con el cobro de Meta por WhatsApp?",
@@ -278,7 +278,7 @@ export default function LandingPage(): React.ReactElement {
               })}
             </div>
             <p className="mt-6 text-xs text-muted-foreground">
-              Precios en pesos colombianos. Cliente adicional por encima del cupo: desde {cop.format(EXTRA_CHAT_COP)}. El cobro de Meta
+              Precios en pesos colombianos. Si necesitas más, recargas saldo cuando quieras. El cobro de Meta
               por WhatsApp lo paga tu negocio directamente a Meta: cada número tiene 1.000 respuestas gratis al mes.
             </p>
           </div>
