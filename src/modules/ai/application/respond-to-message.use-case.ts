@@ -12,7 +12,7 @@ import { GRAPH_PROFILES } from "../infrastructure/graph/profiles";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
 import { buildCollectionTools } from "../infrastructure/collection-tools";
 import { aiCollections } from "@modules/collections/application/collections.use-cases";
-import { collectionsCatalog } from "@modules/collections/domain/collections";
+import { collectionsCatalog, tableAccessByName } from "@modules/collections/domain/collections";
 import { formatClientProfile, resumeNote } from "../domain/client-memory";
 import { agentPermissionsFrom, filterToolsByPermissions, hasPermission, permissionRestrictions } from "../domain/agent-permissions";
 import { aiBudgetExhausted } from "@modules/billing/application/usage";
@@ -238,7 +238,11 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     const qualification = formatLeadQualification(buyerLead);
 
     // Reglas de negocio editables (tabla ai_rules) y tablas de información que puede consultar
-    const [rules, collections] = await Promise.all([loadActiveRules(tenantId, profile), aiCollections(tenantId)]);
+    // Las habilidades que usan una tabla le dan acceso a ella (consultar, modificar o crear filas)
+    const rules = await loadActiveRules(tenantId, profile);
+    const skillTables = rules.flatMap((r) => (r.table ? [r.table] : []));
+    const collections = await aiCollections(tenantId, skillTables.map((t) => t.id));
+    const skillAccess = tableAccessByName(skillTables.map((t) => ({ table: t.name, access: t.access })));
 
     // Voz del agente: solo si el proveedor de WhatsApp manda audios y la voz elegida está disponible
     const voice = await loadVoiceSettings(tenantId);
@@ -287,7 +291,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         : buildTools(tenantId, toolContext);
     const tools = [
       ...filterToolsByPermissions(allTools, permissions),
-      ...buildCollectionTools(tenantId, collections.map((c) => c.name)),
+      ...buildCollectionTools(tenantId, collections.map((c) => c.name), skillAccess),
     ];
 
     const engine = aiEngine();

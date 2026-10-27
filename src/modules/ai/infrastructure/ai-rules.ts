@@ -1,4 +1,5 @@
 import { prisma } from "@shared/infrastructure/prisma/client";
+import { isTableAccess } from "@modules/collections/domain/collections";
 import { defaultRulesFor, type AgentProfileValue, type PromptRule } from "../domain/default-rules";
 
 /**
@@ -29,11 +30,15 @@ export async function restoreDefaultRules(tenantId: string, profile: AgentProfil
 /** Reglas activas que la IA debe seguir, en el orden que definió el negocio. */
 export async function loadActiveRules(tenantId: string, profile: AgentProfileValue): Promise<PromptRule[]> {
   await ensureDefaultRules(tenantId, profile);
-  return prisma.aiRule.findMany({
+  const rows = await prisma.aiRule.findMany({
     where: { tenantId, isActive: true },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    select: { category: true, title: true, content: true },
+    select: { category: true, title: true, content: true, collectionAccess: true, collection: { select: { id: true, name: true } } },
   });
+  return rows.map(({ collectionAccess, collection, ...rule }) => ({
+    ...rule,
+    table: collection && isTableAccess(collectionAccess) ? { ...collection, access: collectionAccess } : null,
+  }));
 }
 
 /**
