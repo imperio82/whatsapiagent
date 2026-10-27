@@ -196,7 +196,7 @@ export class AdvisorAssistantUseCase {
   /** Mismo registro de uso que las respuestas a clientes, para que el costo del asistente se vea por negocio. */
   private async logUsage(
     advisor: Advisor,
-    result: { model: string; tokensIn: number; tokensOut: number; toolCallsUsed: number },
+    result: { model: string; tokensIn: number; cachedTokensIn?: number; tokensOut: number; toolCallsUsed: number },
   ): Promise<void> {
     try {
       await prisma.aiUsageLog.create({
@@ -206,9 +206,10 @@ export class AdvisorAssistantUseCase {
           provider: this.ai.kind,
           model: result.model,
           tokensIn: result.tokensIn,
+          cachedTokensIn: result.cachedTokensIn ?? 0,
           tokensOut: result.tokensOut,
           toolCalls: result.toolCallsUsed,
-          costMicroUsd: estimateCostMicroUsd(result.model, result.tokensIn, result.tokensOut),
+          costMicroUsd: estimateCostMicroUsd(result.model, result.tokensIn, result.tokensOut, result.cachedTokensIn),
           intent: "advisor",
         },
       });

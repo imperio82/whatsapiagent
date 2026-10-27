@@ -7,6 +7,7 @@ import type {
   UpdateTenantBillingInput,
 } from "@modules/platform/application/platform.use-cases";
 import type { AgentModelDto, SetAgentModelInput } from "@modules/platform/application/agent-model.use-cases";
+import type { SetEnforcementInput, UsageLimitsDto } from "@modules/platform/application/usage-limits.use-cases";
 
 const BASE = "/api/v1/platform/tenants";
 
@@ -18,4 +19,6 @@ export const platformService = {
   addEntry: (id: string, input: AddBillingEntryInput) => api.post<BillingEntryDto>(`${BASE}/${id}/billing`, input),
   agentModel: () => api.get<AgentModelDto>("/api/v1/platform/ai-model"),
   setAgentModel: (input: SetAgentModelInput) => api.put<AgentModelDto>("/api/v1/platform/ai-model", input),
+  limits: (month: string) => api.get<UsageLimitsDto>(`/api/v1/platform/limits?month=${month}`),
+  setEnforcement: (input: SetEnforcementInput) => api.put<UsageLimitsDto>("/api/v1/platform/limits", input),
 };

@@ -17,6 +17,8 @@ export interface TenantUsage {
   transcriptions: number;
   voiceMicroUsd: number;
   tokensIn: number;
+  /** Parte de tokensIn que salió de la caché del proveedor (más barata) */
+  cachedTokensIn: number;
   tokensOut: number;
   /** Mensajes enviados por WhatsApp (agente y equipo), que es lo que Meta cobra */
   outboundMessages: number;
@@ -49,7 +51,7 @@ export async function usageByTenant(
     prisma.aiUsageLog.groupBy({
       by: ["tenantId"],
       where: { tenantId: { in: ids }, createdAt: inPeriod },
-      _sum: { costMicroUsd: true, tokensIn: true, tokensOut: true },
+      _sum: { costMicroUsd: true, tokensIn: true, cachedTokensIn: true, tokensOut: true },
       _count: { _all: true },
     }),
     prisma.aiUsageLog.groupBy({
@@ -110,6 +112,7 @@ export async function usageByTenant(
       transcriptions: heard?._count._all ?? 0,
       voiceMicroUsd: (notes?._sum.costMicroUsd ?? 0) + (heard?._sum.costMicroUsd ?? 0),
       tokensIn: a?._sum.tokensIn ?? 0,
+      cachedTokensIn: a?._sum.cachedTokensIn ?? 0,
       tokensOut: a?._sum.tokensOut ?? 0,
       outboundMessages: outboundBy.get(t.id) ?? 0,
       spentMicroUsd: a?._sum.costMicroUsd ?? 0,

@@ -1,5 +1,6 @@
 import type { UseCase } from "@shared/domain/use-case";
 import { prisma } from "@shared/infrastructure/prisma/client";
+import { SIMULATED_DOMAIN } from "@shared/domain/wa-jid";
 import type { AIProvider, ChatMessage, ChatTurnOutput } from "../domain/ports/ai-provider";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
 import { buildBusinessContext, buildSystemPrompt, buildTurnContext, type SystemPromptInput } from "../infrastructure/system-prompt";
@@ -12,6 +13,10 @@ import { estimateCostMicroUsd } from "../infrastructure/pricing";
 import { formatClientProfile, resumeNote } from "../domain/client-memory";
 import { agentPermissionsFrom, filterToolsByPermissions, hasPermission, permissionRestrictions } from "../domain/agent-permissions";
 import { aiBudgetExhausted } from "@modules/billing/application/usage";
+import { canRespond, countWaitMessage } from "@modules/billing/application/response-gate";
+import { waitMessage } from "@modules/billing/domain/usage-limits";
+import type { PlanTier } from "@modules/billing/domain/plans";
+import { limitsEnforcement } from "@modules/platform/infrastructure/platform-settings";
 import { decideVoiceReply, type VoiceDecision } from "@modules/voice/domain/voice-policy";
 import { loadVoiceSettings, logVoiceUsage, saveClip, synthesizeReply, type VoiceSettings } from "@modules/voice/application/voice-runtime";
 import { elevenLabsConfigured, geminiConfigured } from "@modules/voice/infrastructure/speech";
@@ -114,10 +119,6 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       console.log(`[ai respond] SKIP: negocio ${tenant.name} en estado ${tenant.status}`);
       return;
     }
-    if (await aiBudgetExhausted(tenant)) {
-      console.log(`[ai respond] SKIP: ${tenant.name} gastó el presupuesto de IA del mes (plan ${tenant.plan})`);
-      return;
-    }
 
     const conversation = await prisma.conversation.findFirst({
       where: { id: conversationId, tenantId },
@@ -142,6 +143,8 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       console.log(`[ai respond] SKIP: último mensaje no es INBOUND (dir=${last?.direction ?? "none"})`);
       return;
     }
+
+    if (!(await this.withinLimits(tenant, conversation))) return;
 
     // Flujo especial LID
     const isLid = conversation.waChatId.endsWith("@lid");
@@ -496,6 +499,65 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
   }
 
   /**
+   * Límites de uso del plan (docs/Límites de uso, alertas y recarga). En modo "registro" solo se anota qué
+   * habría pasado y sigue el freno anterior (sin saldo, no responde). En modo "activo", al llegar al tope los
+   * chats abiertos siguen 48 h y los clientes nuevos reciben un mensaje fijo, sin IA, y pasan al equipo.
+   * El simulador no cuenta para el cupo. Devuelve si la IA puede responder.
+   */
+  private async withinLimits(
+    tenant: { id: string; name: string; plan: PlanTier },
+    conversation: { id: string; waChatId: string },
+  ): Promise<boolean> {
+    const simulated = conversation.waChatId.endsWith(SIMULATED_DOMAIN);
+    const enforcement = await limitsEnforcement();
+    if (!simulated) {
+      try {
+        const decision = await canRespond(tenant, conversation.id);
+        if (decision.mode !== "IA") {
+          console.log(
+            `[limites] ${tenant.name}: ${decision.mode} — ${decision.reason}${enforcement === "registro" ? " (solo registro, no se aplica)" : ""}`,
+          );
+        }
+        if (enforcement === "activo") {
+          if (decision.mode === "ESPERA") await this.sendWaitMessage(tenant, conversation);
+          return decision.mode !== "ESPERA";
+        }
+      } catch (err) {
+        // Si el cálculo falla (por ejemplo, la migración sin aplicar), el agente sigue con el freno anterior
+        console.error(`[limites] no se pudo calcular el cupo de ${tenant.name}:`, err);
+      }
+    }
+    if (enforcement === "activo" && simulated) return true;
+    if (await aiBudgetExhausted(tenant)) {
+      console.log(`[ai respond] SKIP: ${tenant.name} gastó el presupuesto de IA del mes (plan ${tenant.plan})`);
+      return false;
+    }
+    return true;
+  }
+
+  /** Mensaje fijo de espera (no gasta IA). La conversación queda para el equipo y la IA en pausa. */
+  private async sendWaitMessage(tenant: { id: string; name: string }, conversation: { id: string; waChatId: string }) {
+    const text = waitMessage(tenant.name);
+    const sent = await this.whatsapp.sendText(tenant.id, { to: conversation.waChatId, text });
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        waMessageId: sent.providerMessageId,
+        direction: "OUTBOUND",
+        type: "TEXT",
+        content: text,
+        authoredBy: "SYSTEM",
+        sentAt: sent.sentAt,
+      },
+    });
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: sent.sentAt, status: "PENDING_REVIEW", aiPausedUntil: new Date(Date.now() + HANDOFF_PAUSE_MS) },
+    });
+    await countWaitMessage(tenant.id);
+  }
+
+  /**
    * Persiste el uso de IA (tokens + costo estimado) del turno. Tolerante a
    * fallos: si la tabla aún no existe o el insert falla, no rompe la respuesta.
    */
@@ -505,7 +567,8 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     result: TurnResult,
   ): Promise<void> {
     try {
-      const costMicroUsd = estimateCostMicroUsd(result.model, result.tokensIn, result.tokensOut);
+      const cachedTokensIn = result.cachedTokensIn ?? 0;
+      const costMicroUsd = estimateCostMicroUsd(result.model, result.tokensIn, result.tokensOut, cachedTokensIn);
       await prisma.aiUsageLog.create({
         data: {
           tenantId,
@@ -513,6 +576,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           provider: result.provider,
           model: result.model,
           tokensIn: result.tokensIn,
+          cachedTokensIn,
           tokensOut: result.tokensOut,
           toolCalls: result.toolCallsUsed,
           costMicroUsd,

@@ -46,15 +46,26 @@ export function priceFor(model: string): ModelPrice {
 }
 
 /**
- * Devuelve el costo estimado de un turno en micro-USD (1e-6 USD), redondeado
- * al entero más cercano.
+ * Los tokens de entrada que el proveedor sirve desde su caché se cobran más baratos. Gemini 2.5 cobra el 25 %
+ * del precio de entrada y los modelos más nuevos menos; con 25 % para todos el costo queda por el lado alto.
+ */
+export const CACHED_INPUT_SHARE = 0.25;
+
+/**
+ * Devuelve el costo estimado de un turno en micro-USD (1e-6 USD), redondeado al entero más cercano.
+ * `cachedTokensIn` es la parte de `tokensIn` que vino de la caché.
  */
 export function estimateCostMicroUsd(
   model: string,
   tokensIn: number,
   tokensOut: number,
+  cachedTokensIn = 0,
 ): number {
   const p = priceFor(model);
-  const usd = (tokensIn / 1_000_000) * p.inPerMillion + (tokensOut / 1_000_000) * p.outPerMillion;
+  const cached = Math.min(Math.max(cachedTokensIn, 0), tokensIn);
+  const usd =
+    ((tokensIn - cached) / 1_000_000) * p.inPerMillion +
+    (cached / 1_000_000) * p.inPerMillion * CACHED_INPUT_SHARE +
+    (tokensOut / 1_000_000) * p.outPerMillion;
   return Math.round(usd * 1_000_000);
 }

@@ -523,6 +523,8 @@ model AiUsageLog {
   provider       String // "openai" | "gemini"
   model          String // modelo concreto (ej: gpt-4o-mini)
   tokensIn       Int
+  /// Parte de tokensIn que el proveedor sirvió desde su caché (se cobra más barata)
+  cachedTokensIn Int      @default(0)
   tokensOut      Int
   toolCalls      Int      @default(0)
   costMicroUsd   Int      @default(0) // costo estimado en millonésimas de USD
@@ -542,6 +544,18 @@ model PlatformSetting {
   updatedAt DateTime @updatedAt
 
   @@map("platform_settings")
+}
+
+/// Estado del cupo de un negocio en un mes (YYYY-MM): cuándo llegó al tope y cuántos clientes quedaron en espera
+model UsageMonth {
+  tenantId     String
+  month        String
+  capReachedAt DateTime?
+  waitMessages Int       @default(0)
+  updatedAt    DateTime  @updatedAt
+
+  @@id([tenantId, month])
+  @@map("usage_months")
 }
 
 enum MessageDirection {

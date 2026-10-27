@@ -12,8 +12,12 @@ export interface Plan {
   /** Clientes distintos que escriben en el mes */
   chats: number;
   users: number;
-  /** Lo que puede gastar la IA en el mes antes de detenerse, sin contar los créditos que se le sumen */
+  /** Tope interno de gasto de IA en el mes (protege el margen), sin contar los créditos que se le sumen */
   aiBudgetUsd: number;
+  /** Precio de cada cliente adicional al recargar */
+  extraChatCop: number;
+  /** El plan que se sugiere al llegar al tope; null = plan a la medida */
+  next: PlanTier | null;
   tagline: string;
   features: string[];
   highlighted?: boolean;
@@ -26,7 +30,9 @@ export const PLANS: Record<PlanTier, Plan> = {
     priceCop: 129_000,
     chats: 500,
     users: 1,
-    aiBudgetUsd: 5,
+    aiBudgetUsd: 10,
+    extraChatCop: 300,
+    next: "PRO",
     tagline: "Para empezar a vender por WhatsApp sin contratar a nadie.",
     features: [
       "Agente de IA que responde las 24 horas",
@@ -41,9 +47,11 @@ export const PLANS: Record<PlanTier, Plan> = {
     tier: "PRO",
     name: "Pro",
     priceCop: 299_000,
-    chats: 1_500,
+    chats: 1_100,
     users: 3,
-    aiBudgetUsd: 15,
+    aiBudgetUsd: 23,
+    extraChatCop: 280,
+    next: "NEGOCIO",
     highlighted: true,
     tagline: "Lo que atendería un vendedor de medio tiempo, todos los días.",
     features: [
@@ -59,9 +67,11 @@ export const PLANS: Record<PlanTier, Plan> = {
     tier: "NEGOCIO",
     name: "Negocio",
     priceCop: 590_000,
-    chats: 4_000,
+    chats: 2_200,
     users: 10,
-    aiBudgetUsd: 40,
+    aiBudgetUsd: 45,
+    extraChatCop: 260,
+    next: null,
     tagline: "Concesionarios, inmobiliarias y distribuidores con equipo de asesores.",
     features: [
       "Todo lo de Pro",
@@ -75,8 +85,34 @@ export const PLANS: Record<PlanTier, Plan> = {
 
 export const PLAN_TIERS = Object.keys(PLANS) as PlanTier[];
 
-/** Lo que se cobra por cada cliente atendido por encima del cupo del plan */
-export const EXTRA_CHAT_COP = 150;
+/**
+ * Límites de uso (docs/Límites de uso, alertas y recarga – Atiendo IA.pdf). Los cupos y topes de arriba
+ * salen de que la IA no pase del 30 % del precio del plan, con ~$77 de IA por cliente atendido.
+ */
+export const USAGE_LIMITS = {
+  /** Peso máximo de la IA sobre el precio del plan */
+  aiShareTarget: 0.3,
+  /** Costo de IA por cliente atendido con el que se calcularon los cupos (prueba del 27 de octubre de 2026) */
+  targetCostPerClientCop: 77,
+  /** Avisos al dueño */
+  warnAt: [0.7, 0.9] as const,
+  /** Horas en que el agente sigue con los chats abiertos después de llegar al tope */
+  graceHours: 48,
+  /** Un chat está "abierto" si el agente le respondió en estas últimas horas */
+  openChatHours: 24,
+  /** Respuestas de IA por contacto al mes; después pasa a un asesor (spam, bots) */
+  maxRepliesPerContact: 40,
+} as const;
+
+/** Paquetes de recarga: el precio por cliente baja al comprar más y la IA queda por debajo del 30 % */
+export const RECHARGE_PACKS = [
+  { clients: 100, priceCop: 30_000 },
+  { clients: 250, priceCop: 70_000 },
+  { clients: 500, priceCop: 130_000 },
+] as const;
+
+/** Precio por cliente adicional más bajo (el del plan más grande), para textos de "desde" */
+export const EXTRA_CHAT_COP = Math.min(...Object.values(PLANS).map((p) => p.extraChatCop));
 export const TRIAL_DAYS = 14;
 
 export const MICRO_USD = 1_000_000;
