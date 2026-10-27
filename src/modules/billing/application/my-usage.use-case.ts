@@ -2,11 +2,14 @@ import { TenantContext } from "@shared/application/tenant-context";
 import { NotFoundError } from "@shared/domain/errors";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import type { UseCase } from "@shared/domain/use-case";
-import { MICRO_USD, limitsPlan, monthPeriod, type PlanTier } from "../domain/plans";
+import { MICRO_USD, limitsPlan, monthPeriod, saleValueUsd, type PlanTier } from "../domain/plans";
 import { trialLimitsFor } from "./trial";
 import { tenantUsage } from "./usage";
 
-/** Lo que ve el negocio en el encabezado: cuánto lleva gastado del mes y cuánto le queda. */
+/**
+ * Lo que ve el negocio en el encabezado: cuánto lleva gastado del mes y cuánto le queda. Los dólares van a
+ * precio de venta (saleValueUsd), no al costo de la plataforma.
+ */
 export interface MyUsageDto {
   plan: PlanTier;
   planName: string;
@@ -43,9 +46,9 @@ export class GetMyUsageUseCase implements UseCase<void, MyUsageDto> {
       chats: usage.chats,
       chatLimit: plan.chats + (recharged._sum.clients ?? 0),
       activeChats: usage.activeChats,
-      spentUsd: usage.spentMicroUsd / MICRO_USD,
-      budgetUsd: usage.budgetMicroUsd / MICRO_USD,
-      creditUsd: usage.creditMicroUsd / MICRO_USD,
+      spentUsd: saleValueUsd(usage.spentMicroUsd / MICRO_USD),
+      budgetUsd: saleValueUsd(usage.budgetMicroUsd / MICRO_USD),
+      creditUsd: saleValueUsd(usage.creditMicroUsd / MICRO_USD),
     };
   }
 }

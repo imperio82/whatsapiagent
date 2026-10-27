@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { saleValueUsd } from "@modules/billing/domain/plans";
 import { z } from "zod";
 import { authorize } from "@shared/application/authorize";
 import { TenantContext } from "@shared/application/tenant-context";
@@ -120,7 +121,8 @@ export class GetSimulatorTraceUseCase {
       tokensIn: r.tokensIn,
       tokensOut: r.tokensOut,
       toolCalls: r.toolCalls,
-      costMicroUsd: r.costMicroUsd,
+      // A precio de venta, como el resto de lo que ve el negocio
+      costMicroUsd: Math.round(saleValueUsd(r.costMicroUsd)),
       trace: Array.isArray(r.trace) ? (r.trace as unknown as TraceStep[]) : [],
     }));
   }
