@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload } from "lucide-react";
 import { Button } from "@components/ui/button";
 import { Input } from "@components/ui/input";
 import {
@@ -25,6 +25,9 @@ export default function ProductsPage(): React.ReactElement {
 
   return (
     <div className="space-y-5">
+      <Link href="/colecciones" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> Colecciones
+      </Link>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Productos</h1>

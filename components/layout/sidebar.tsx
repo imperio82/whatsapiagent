@@ -7,7 +7,6 @@ import {
   AudioLines,
   BarChart3,
   ChevronDown,
-  Boxes,
   CalendarClock,
   BellRing,
   Database,
@@ -15,7 +14,6 @@ import {
   FlaskConical,
   Plug,
   Target,
-  Car,
   ListChecks,
   LayoutDashboard,
   MessageSquare,
@@ -38,6 +36,8 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
+  /** Otras páginas que cuentan como esta opción (se llega a ellas desde adentro) */
+  also?: string[];
 }
 
 /** El menú cambia con el tipo de negocio: la tienda ve pedidos y productos; la intermediación, citas e inventario. */
@@ -66,10 +66,8 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
   {
     section: "Catálogo",
     items: [
-      brokerage
-        ? { href: "/inventario", label: "Inventario", icon: Car }
-        : { href: "/productos", label: "Productos", icon: Boxes },
-      { href: "/colecciones", label: "Colecciones", icon: Table2, badge: "IA" },
+      // El inventario y los productos están dentro de Colecciones, como tablas del sistema
+      { href: "/colecciones", label: "Colecciones", icon: Table2, badge: "IA", also: ["/inventario", "/productos"] },
       { href: "/plantillas", label: "Plantillas", icon: PenSquare },
     ],
   },
@@ -101,9 +99,16 @@ const OPEN_SECTIONS_KEY = "sidebar-open-sections";
 /** Abiertas hasta que el usuario elija otras: las de conversaciones y productos/inventario. */
 const DEFAULT_OPEN_SECTIONS = ["Operación", "Catálogo"];
 
-function isActive(pathname: string, href: string): boolean {
+function matches(pathname: string, href: string): boolean {
   return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
 }
+
+function isActive(pathname: string, item: NavItem): boolean {
+  return matches(pathname, item.href) || !!item.also?.some((href) => matches(pathname, href));
+}
+
+const isTourItem = (item: NavItem, tourHref: string | null | undefined) =>
+  !!tourHref && (item.href === tourHref || !!item.also?.includes(tourHref));
 
 function loadOpenSections(): string[] {
   try {
@@ -132,10 +137,10 @@ export function Sidebar({
   // La sección de la página actual siempre se abre
   const [open, setOpen] = useState<string[]>(DEFAULT_OPEN_SECTIONS);
   useEffect(() => setOpen(loadOpenSections()), []);
-  const currentSection = nav.find((g) => g.items.some((i) => isActive(pathname, i.href)))?.section;
+  const currentSection = nav.find((g) => g.items.some((i) => isActive(pathname, i)))?.section;
   // La guía de inicio rápido resalta la opción de la que está hablando y abre su sección
   const tourHref = useQuickStartHref();
-  const tourSection = nav.find((g) => g.items.some((i) => i.href === tourHref))?.section;
+  const tourSection = nav.find((g) => g.items.some((i) => isTourItem(i, tourHref)))?.section;
 
   function toggle(section: string, isOpen: boolean) {
     const next = isOpen ? open.filter((s) => s !== section) : [...open, section];
@@ -180,7 +185,7 @@ export function Sidebar({
                   <ul id={listId} className="mb-2 space-y-px">
                     {group.items.map((item) => {
                       const Icon = item.icon;
-                      const active = isActive(pathname, item.href);
+                      const active = isActive(pathname, item);
                       return (
                         <li key={item.href}>
                           <Link
@@ -190,7 +195,7 @@ export function Sidebar({
                               active
                                 ? "bg-accent text-accent-foreground font-medium"
                                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                              item.href === tourHref && "animate-pulse ring-2 ring-wa",
+                              isTourItem(item, tourHref) && "animate-pulse ring-2 ring-wa",
                             )}
                           >
                             <Icon
