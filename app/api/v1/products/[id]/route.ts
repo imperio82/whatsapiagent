@@ -4,6 +4,14 @@ import { withRequestContext } from "@shared/interface/http/with-request-context"
 
 const controller = new ProductsController();
 
+export const GET = withRequestContext(async (req) => {
+  try {
+    return ok(await controller.get(new URL(req.url).pathname.split("/").pop()!));
+  } catch (err) {
+    return failure(err);
+  }
+});
+
 export const PATCH = withRequestContext(async (req) => {
   try {
     const url = new URL(req.url);

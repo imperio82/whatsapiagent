@@ -10,6 +10,10 @@ import {
   type ProductDto,
 } from "../application/dtos";
 import { PrismaProductRepository } from "../infrastructure/prisma-product.repository";
+import { authorize } from "@shared/application/authorize";
+import { TenantContext } from "@shared/application/tenant-context";
+import { NotFoundError } from "@shared/domain/errors";
+import { toProductDto } from "../application/mapper";
 
 export class ProductsController {
   private readonly repo = new PrismaProductRepository();
@@ -21,6 +25,13 @@ export class ProductsController {
   async list(query: URLSearchParams): Promise<Page<ProductDto>> {
     const input = listProductsSchema.parse(Object.fromEntries(query.entries()));
     return this.listUC.execute(input);
+  }
+
+  async get(id: string): Promise<ProductDto> {
+    authorize("products.read");
+    const product = await this.repo.findById(TenantContext.require().tenantId, id);
+    if (!product) throw new NotFoundError("Producto no encontrado");
+    return toProductDto(product);
   }
 
   async create(body: unknown): Promise<ProductDto> {

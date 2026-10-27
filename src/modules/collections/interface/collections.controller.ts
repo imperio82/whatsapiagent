@@ -1,6 +1,11 @@
 import { ValidationError } from "@shared/domain/errors";
 import {
+  AddCollectionRowUseCase,
   CreateCollectionUseCase,
+  DeleteCollectionRowUseCase,
+  UpdateCollectionRowUseCase,
+  rowValuesSchema,
+  type CollectionRowDto,
   DeleteCollectionUseCase,
   GetCollectionRowsUseCase,
   ListCollectionsUseCase,
@@ -31,6 +36,9 @@ export class CollectionsController {
   private readonly replaceUC = new ReplaceCollectionDataUseCase();
   private readonly updateUC = new UpdateCollectionUseCase();
   private readonly deleteUC = new DeleteCollectionUseCase();
+  private readonly addRowUC = new AddCollectionRowUseCase();
+  private readonly updateRowUC = new UpdateCollectionRowUseCase();
+  private readonly deleteRowUC = new DeleteCollectionRowUseCase();
 
   list(): Promise<CollectionDto[]> {
     return this.listUC.execute();
@@ -61,5 +69,17 @@ export class CollectionsController {
 
   remove(id: string): Promise<void> {
     return this.deleteUC.execute(id);
+  }
+
+  addRow(id: string, body: unknown): Promise<CollectionRowDto> {
+    return this.addRowUC.execute(id, rowValuesSchema.parse(body));
+  }
+
+  updateRow(id: string, rowId: string, body: unknown): Promise<CollectionRowDto> {
+    return this.updateRowUC.execute(id, rowId, rowValuesSchema.parse(body));
+  }
+
+  removeRow(id: string, rowId: string): Promise<void> {
+    return this.deleteRowUC.execute(id, rowId);
   }
 }

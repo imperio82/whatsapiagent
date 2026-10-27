@@ -4,12 +4,14 @@ import { listListingsSchema, type ListingDto } from "../application/dtos";
 import {
   ArchiveListingUseCase,
   CreateListingUseCase,
+  GetListingUseCase,
   ListListingsUseCase,
   UpdateListingUseCase,
 } from "../application/use-cases";
 
 export class ListingsController {
   private readonly listUC = new ListListingsUseCase();
+  private readonly getUC = new GetListingUseCase();
   private readonly matching = new MatchingService(getWhatsAppProvider());
   private readonly createUC = new CreateListingUseCase(this.matching);
   private readonly updateUC = new UpdateListingUseCase(this.matching);
@@ -22,6 +24,10 @@ export class ListingsController {
       status: searchParams.get("status") || undefined,
     });
     return this.listUC.execute(input);
+  }
+
+  get(id: string): Promise<ListingDto> {
+    return this.getUC.execute(id);
   }
 
   create(body: unknown): Promise<ListingDto> {

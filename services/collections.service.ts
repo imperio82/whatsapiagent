@@ -1,5 +1,5 @@
 import { api, ApiError } from "./api-client";
-import type { CollectionDto, CollectionRowsDto } from "@modules/collections/application/collections.use-cases";
+import type { CollectionDto, CollectionRowDto, CollectionRowsDto } from "@modules/collections/application/collections.use-cases";
 
 /** Los archivos van en multipart; el cliente JSON no sirve aquí. */
 async function upload<T>(method: "POST" | "PUT", path: string, file: File, fields: Record<string, string | null | undefined>): Promise<T> {
@@ -31,4 +31,9 @@ export const collectionsService = {
   replaceData: (id: string, file: File) => upload<CollectionDto>("PUT", `/api/v1/collections/${id}/data`, file, {}),
   update: (id: string, input: Partial<CollectionMeta>) => api.patch<CollectionDto>(`/api/v1/collections/${id}`, input),
   remove: (id: string) => api.delete<void>(`/api/v1/collections/${id}`),
+  addRow: (id: string, values: Record<string, string>) =>
+    api.post<CollectionRowDto>(`/api/v1/collections/${id}/rows`, { values }),
+  updateRow: (id: string, rowId: string, values: Record<string, string>) =>
+    api.patch<CollectionRowDto>(`/api/v1/collections/${id}/rows/${rowId}`, { values }),
+  removeRow: (id: string, rowId: string) => api.delete<void>(`/api/v1/collections/${id}/rows/${rowId}`),
 };

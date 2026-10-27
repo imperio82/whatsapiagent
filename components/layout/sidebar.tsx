@@ -67,7 +67,7 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
     section: "Catálogo",
     items: [
       // El inventario y los productos están dentro de Colecciones, como tablas del sistema
-      { href: "/colecciones", label: "Colecciones", icon: Table2, badge: "IA", also: ["/inventario", "/productos"] },
+      { href: "/colecciones", label: "Colecciones", icon: Table2, badge: "IA" },
       { href: "/plantillas", label: "Plantillas", icon: PenSquare },
     ],
   },

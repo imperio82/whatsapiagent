@@ -227,7 +227,7 @@ function BrokerageHome({ name }: { name: string }): React.ReactElement {
               </p>
             </div>
             <div className="flex gap-2 text-xs">
-              <Link href="/inventario" className="rounded-md bg-wa px-3 py-1.5 font-medium text-wa-foreground">
+              <Link href="/colecciones/sistema-inventario" className="rounded-md bg-wa px-3 py-1.5 font-medium text-wa-foreground">
                 Agregar bienes
               </Link>
               <Link href="/configuracion/whatsapp" className="rounded-md border border-border px-3 py-1.5 font-medium">
@@ -252,7 +252,7 @@ function BrokerageHome({ name }: { name: string }): React.ReactElement {
           value={toReview?.length ?? "—"}
           icon={ClipboardCheck}
           accent="text-amber-500"
-          href="/inventario"
+          href="/colecciones/sistema-inventario?q=por+aprobar"
           loading={reviewLoading}
         />
         <StatCard

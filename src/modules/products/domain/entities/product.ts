@@ -80,8 +80,32 @@ export class Product {
     this.touch();
   }
 
+  /** Los demás datos de la ficha; solo cambia lo que viene. */
+  updateDetails(input: {
+    sku?: string | null;
+    description?: string | null;
+    trackInventory?: boolean;
+    stock?: number;
+    imageUrl?: string | null;
+  }): void {
+    const trackInventory = input.trackInventory ?? this.props.trackInventory;
+    const stock = input.stock ?? this.props.stock;
+    if (trackInventory && stock < 0) throw new ValidationError("El stock no puede ser negativo");
+    if (input.sku !== undefined) this.props.sku = input.sku?.trim() || null;
+    if (input.description !== undefined) this.props.description = input.description?.trim() || null;
+    if (input.imageUrl !== undefined) this.props.imageUrl = input.imageUrl?.trim() || null;
+    this.props.trackInventory = trackInventory;
+    this.props.stock = stock;
+    this.touch();
+  }
+
   archive(): void {
     this.props.status = "ARCHIVED";
+    this.touch();
+  }
+
+  activate(): void {
+    this.props.status = "ACTIVE";
     this.touch();
   }
 

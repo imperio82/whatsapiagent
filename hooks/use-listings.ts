@@ -16,12 +16,18 @@ export function useListings(filters: Partial<ListListingsInput> = {}) {
   return useQuery({ queryKey: [KEY, filters], queryFn: () => listingsService.list(filters) });
 }
 
+export function useListing(id: string | null) {
+  return useQuery({ queryKey: [KEY, "one", id], queryFn: () => listingsService.get(id!), enabled: !!id });
+}
+
 export function useCreateListing() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateListingInput) => listingsService.create(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
+      // El inventario y los productos también se ven como colección
+      qc.invalidateQueries({ queryKey: ["collections"] });
       qc.invalidateQueries({ queryKey: ["matches"] });
       toast.success("Bien agregado al inventario");
     },
@@ -35,6 +41,8 @@ export function useUpdateListing() {
     mutationFn: ({ id, input }: { id: string; input: UpdateListingInput }) => listingsService.update(id, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
+      // El inventario y los productos también se ven como colección
+      qc.invalidateQueries({ queryKey: ["collections"] });
       qc.invalidateQueries({ queryKey: ["matches"] });
       toast.success("Inventario actualizado");
     },
@@ -48,6 +56,8 @@ export function useArchiveListing() {
     mutationFn: (id: string) => listingsService.archive(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
+      // El inventario y los productos también se ven como colección
+      qc.invalidateQueries({ queryKey: ["collections"] });
       toast.success("Bien archivado");
     },
     onError: showError,
