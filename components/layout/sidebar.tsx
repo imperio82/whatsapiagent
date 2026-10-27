@@ -11,6 +11,7 @@ import {
   CalendarClock,
   BellRing,
   Database,
+  Table2,
   FlaskConical,
   Plug,
   Target,
@@ -68,6 +69,7 @@ const navFor = (brokerage: boolean): { section: string; items: NavItem[] }[] => 
       brokerage
         ? { href: "/inventario", label: "Inventario", icon: Car }
         : { href: "/productos", label: "Productos", icon: Boxes },
+      { href: "/colecciones", label: "Colecciones", icon: Table2, badge: "IA" },
       { href: "/plantillas", label: "Plantillas", icon: PenSquare },
     ],
   },

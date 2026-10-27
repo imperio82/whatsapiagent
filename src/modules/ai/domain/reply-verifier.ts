@@ -85,6 +85,11 @@ export function extractOrderCodes(text: string): string[] {
 function collectPrices(value: unknown, into: Set<number>, key = ""): void {
   if (typeof value === "number") {
     if (/price|total|payment|amount/i.test(key) && value > 0) into.add(value);
+  } else if (typeof value === "string") {
+    // Celdas de las tablas de información: "$2.100.000", "1,2 millones", "2.100.000" o "2100000"
+    for (const amount of extractSpokenAmounts(value)) into.add(amount);
+    const bare = value.trim().match(/^\d{1,3}(?:[.,]\d{3})+$|^\d{4,}$/);
+    if (bare) into.add(Number(bare[0].replace(/[.,]/g, "")));
   } else if (Array.isArray(value)) {
     for (const v of value) collectPrices(v, into, key);
   } else if (value && typeof value === "object") {

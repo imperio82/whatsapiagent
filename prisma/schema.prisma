@@ -97,6 +97,7 @@ model Tenant {
   reminders       Reminder[]
   billingEntries  BillingEntry[]
   recharges       Recharge[]
+  collections     Collection[]
   agentVoice      AgentVoice?
   clonedVoices    ClonedVoice[]
   voiceClips      VoiceClip[]
@@ -129,6 +130,45 @@ model BillingEntry {
 
   @@index([tenantId, createdAt])
   @@map("billing_entries")
+}
+
+/// Tabla de información que sube el negocio con la estructura que quiera (Excel, CSV o JSON). El agente ve
+/// el nombre, la descripción y las columnas de las que tienen aiEnabled, y las consulta con una herramienta.
+model Collection {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  /// Para qué sirve: el agente la lee para decidir cuándo consultarla
+  description String?
+  /// Nombres de las columnas, en orden
+  columns     Json
+  rowCount    Int      @default(0)
+  aiEnabled   Boolean  @default(true)
+  /// De dónde salió la última carga (nombre del archivo y pestaña)
+  sourceName  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rows   CollectionRow[]
+
+  @@unique([tenantId, name])
+  @@map("collections")
+}
+
+model CollectionRow {
+  id           String @id @default(cuid())
+  collectionId String
+  position     Int
+  /// { columna: valor } con todos los valores como texto
+  data         Json
+  /// Todo el contenido de la fila en minúsculas y sin tildes, para buscar
+  searchText   String
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId, position])
+  @@map("collection_rows")
 }
 
 /// Recarga de saldo que pide el dueño del negocio: clientes adicionales y saldo de IA para el mes en que se paga.

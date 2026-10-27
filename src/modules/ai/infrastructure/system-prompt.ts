@@ -28,6 +28,8 @@ export interface SystemPromptInput {
   personality?: string | null;
   /** Lo que el agente no puede hacer por los permisos del negocio, y qué hacer en su lugar */
   restrictions?: string | null;
+  /** Las tablas de información (colecciones) que puede consultar: nombre, para qué sirven y columnas */
+  collections?: string | null;
   /** Nombre del cliente si lo conocemos (no los genéricos "Cliente 1234"). */
   clientName?: string | null;
   /** Lo que ya se sabe del cliente: ficha, memoria y pedidos anteriores (ver client-memory.ts). */
@@ -66,7 +68,7 @@ ${personality}`
       : ""
   }
 
-INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté aquí):${section("Descripción", input.description)}${section("Dirección", input.address)}${section("Horario de atención", input.businessHours)}${section(brokerage ? "Cobertura y zonas" : "Envíos y entregas", input.deliveryInfo)}${section(brokerage ? "Formas de pago y financiación" : "Medios de pago", input.paymentInfo)}${section("Preguntas frecuentes y políticas", input.faq)}${formatBusinessRules(input.rules ?? [])}${
+INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté aquí):${section("Descripción", input.description)}${section("Dirección", input.address)}${section("Horario de atención", input.businessHours)}${section(brokerage ? "Cobertura y zonas" : "Envíos y entregas", input.deliveryInfo)}${section(brokerage ? "Formas de pago y financiación" : "Medios de pago", input.paymentInfo)}${section("Preguntas frecuentes y políticas", input.faq)}${input.collections ? `\n${input.collections}\n` : ""}${formatBusinessRules(input.rules ?? [])}${
     input.restrictions ? `
 ${input.restrictions}
 ` : ""
