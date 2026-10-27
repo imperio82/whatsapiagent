@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ChevronLeft, ChevronRight, Search, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink, Search, Trash2, Upload } from "lucide-react";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
 import { Input } from "@components/ui/input";
@@ -132,6 +132,35 @@ export default function CollectionPage(): React.ReactElement {
           )}
         </div>
 
+        {collection.system ? (
+          <div className="space-y-3">
+            <Card>
+              <CardContent className="space-y-3 p-4 text-sm">
+                <p>{collection.description}</p>
+                <p className="text-xs text-muted-foreground">
+                  Esta tabla se arma sola con lo que tienes en {collection.name}: para agregar, editar, importar o borrar, hazlo
+                  allá y aquí se ve al instante.
+                </p>
+                <Button asChild size="sm" variant="outline" className="w-full">
+                  <Link href={collection.system.editHref}>
+                    <ExternalLink className="h-4 w-4" /> Editar en {collection.name}
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="space-y-2 p-4 text-sm">
+                <div className="font-medium">{collection.aiEnabled ? "El agente la consulta" : "El agente no la consulta"}</div>
+                <p className="text-xs text-muted-foreground">
+                  El acceso se da en Mi agente → Permisos del agente, en la sección {collection.name.toLowerCase()}.
+                </p>
+                <Button asChild size="sm" variant="ghost" className="w-full">
+                  <Link href="/configuracion/ia">Ir a permisos del agente</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
         <div className="space-y-3">
           <Card>
             <CardContent className="space-y-3 p-4">
@@ -225,6 +254,7 @@ export default function CollectionPage(): React.ReactElement {
             </CardContent>
           </Card>
         </div>
+        )}
       </div>
     </div>
   );
