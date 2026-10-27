@@ -10,6 +10,9 @@ import { buildBrokerageTools, formatLeadQualification } from "../infrastructure/
 import { loadActiveRules } from "../infrastructure/ai-rules";
 import { GRAPH_PROFILES } from "../infrastructure/graph/profiles";
 import { estimateCostMicroUsd } from "../infrastructure/pricing";
+import { buildCollectionTools } from "../infrastructure/collection-tools";
+import { aiCollections } from "@modules/collections/application/collections.use-cases";
+import { collectionsCatalog } from "@modules/collections/domain/collections";
 import { formatClientProfile, resumeNote } from "../domain/client-memory";
 import { agentPermissionsFrom, filterToolsByPermissions, hasPermission, permissionRestrictions } from "../domain/agent-permissions";
 import { aiBudgetExhausted } from "@modules/billing/application/usage";
@@ -234,8 +237,8 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         : null;
     const qualification = formatLeadQualification(buyerLead);
 
-    // Reglas de negocio editables (tabla ai_rules)
-    const rules = await loadActiveRules(tenantId, profile);
+    // Reglas de negocio editables (tabla ai_rules) y tablas de información que puede consultar
+    const [rules, collections] = await Promise.all([loadActiveRules(tenantId, profile), aiCollections(tenantId)]);
 
     // Voz del agente: solo si el proveedor de WhatsApp manda audios y la voz elegida está disponible
     const voice = await loadVoiceSettings(tenantId);
@@ -261,6 +264,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       agentRole: tenant.aiAgentRole,
       personality: tenant.aiPersonality,
       restrictions: permissionRestrictions(permissions, profile),
+      collections: collectionsCatalog(collections),
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
       clientProfile: [clientProfile, qualification].filter(Boolean).join("\n\n") || null,
     };
@@ -281,7 +285,10 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
               : undefined,
           })
         : buildTools(tenantId, toolContext);
-    const tools = filterToolsByPermissions(allTools, permissions);
+    const tools = [
+      ...filterToolsByPermissions(allTools, permissions),
+      ...buildCollectionTools(tenantId, collections.map((c) => c.name)),
+    ];
 
     const engine = aiEngine();
     console.log(

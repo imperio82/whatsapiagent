@@ -6,6 +6,7 @@ import { Email } from "../domain/value-objects/email";
 import { Password } from "../domain/value-objects/password";
 import type { PasswordHasher } from "../domain/ports/password-hasher";
 import { TRIAL_DAYS } from "@modules/billing/domain/plans";
+import { LEGAL_VERSION } from "@shared/domain/legal";
 
 export interface RegisterTenantInput {
   businessName: string;
@@ -16,6 +17,8 @@ export interface RegisterTenantInput {
   ownerEmail: string;
   ownerName: string;
   password: string;
+  /** Aceptó los términos y la política de datos al registrarse; la IP queda como constancia */
+  acceptedFromIp?: string | null;
 }
 
 export interface RegisterTenantOutput {
@@ -62,6 +65,9 @@ export class RegisterTenantUseCase implements UseCase<RegisterTenantInput, Regis
           agentProfile,
           // Prueba gratis: el administrador ve cuándo vence y registra el primer pago
           paidUntil: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+          termsAcceptedAt: new Date(),
+          termsVersion: LEGAL_VERSION,
+          termsAcceptedIp: input.acceptedFromIp ?? null,
         },
       });
 
@@ -74,6 +80,8 @@ export class RegisterTenantUseCase implements UseCase<RegisterTenantInput, Regis
           passwordHash,
         },
       });
+
+      await tx.tenant.update({ where: { id: tenant.id }, data: { termsAcceptedById: user.id } });
 
       const membership = await tx.membership.create({
         data: { userId: user.id, tenantId: tenant.id, status: "ACTIVE" },

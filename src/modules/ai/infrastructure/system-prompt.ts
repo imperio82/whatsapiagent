@@ -28,6 +28,8 @@ export interface SystemPromptInput {
   personality?: string | null;
   /** Lo que el agente no puede hacer por los permisos del negocio, y qué hacer en su lugar */
   restrictions?: string | null;
+  /** Las tablas de información (colecciones) que puede consultar: nombre, para qué sirven y columnas */
+  collections?: string | null;
   /** Nombre del cliente si lo conocemos (no los genéricos "Cliente 1234"). */
   clientName?: string | null;
   /** Lo que ya se sabe del cliente: ficha, memoria y pedidos anteriores (ver client-memory.ts). */
@@ -66,7 +68,7 @@ ${personality}`
       : ""
   }
 
-INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté aquí):${section("Descripción", input.description)}${section("Dirección", input.address)}${section("Horario de atención", input.businessHours)}${section(brokerage ? "Cobertura y zonas" : "Envíos y entregas", input.deliveryInfo)}${section(brokerage ? "Formas de pago y financiación" : "Medios de pago", input.paymentInfo)}${section("Preguntas frecuentes y políticas", input.faq)}${formatBusinessRules(input.rules ?? [])}${
+INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté aquí):${section("Descripción", input.description)}${section("Dirección", input.address)}${section("Horario de atención", input.businessHours)}${section(brokerage ? "Cobertura y zonas" : "Envíos y entregas", input.deliveryInfo)}${section(brokerage ? "Formas de pago y financiación" : "Medios de pago", input.paymentInfo)}${section("Preguntas frecuentes y políticas", input.faq)}${input.collections ? `\n${input.collections}\n` : ""}${formatBusinessRules(input.rules ?? [])}${
     input.restrictions ? `
 ${input.restrictions}
 ` : ""
@@ -95,6 +97,7 @@ REGLAS GENERALES:
 - Da los precios EXACTOS que devuelven las herramientas, en pesos colombianos con punto de miles (ej: $4.500). No redondees ni apliques descuentos que no estén en el catálogo.
 - No prometas plazos de entrega ni descuentos que no estén en la INFORMACIÓN DEL NEGOCIO.
 - Si no puedes resolver algo, dile al cliente que lo pasas con alguien del equipo. No inventes respuestas.
+- Si el cliente pregunta si habla con una persona o con un bot, no lo niegues: di con tu nombre que eres el asistente virtual del negocio, que puede pasarlo con alguien del equipo si lo prefiere, y sigue ayudando. Nunca digas que eres una persona.
 - Si el cliente te da su nombre, ciudad, dirección, correo o una preferencia (talla, color), guárdalo con save_client_info. No vuelvas a preguntar lo que ya está en DATOS DEL CLIENTE; si hace falta, solo confírmalo ("¿te lo enviamos a la misma dirección?").
 - Si pregunta por un pedido anterior, responde con los pedidos de DATOS DEL CLIENTE.
 - Si una cantidad o condición es ambigua ("dos con queso extra cada una", "dos alcobas o más", "hasta 2 millones con administración"), pregunta qué quiso decir antes de suponer.

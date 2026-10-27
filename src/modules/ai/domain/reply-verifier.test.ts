@@ -70,3 +70,11 @@ describe("verifyReply", () => {
     assert.equal(r.ok, true, r.problems.join(" "));
   });
 });
+
+describe("precios de las tablas de información", () => {
+  it("acepta un precio que viene como texto en una fila de la tabla", () => {
+    const toolOutputs = [JSON.stringify({ ok: true, table: "Tarifas", rows: [{ servicio: "Avalúo", valor: "$350.000" }, { servicio: "Estudio de títulos", valor: "180000" }] })];
+    assert.equal(verifyReply("El avalúo cuesta $350.000 y el estudio de títulos $180.000.", { toolOutputs, businessContext: "" }).ok, true);
+    assert.equal(verifyReply("El avalúo cuesta $400.000.", { toolOutputs, businessContext: "" }).ok, false);
+  });
+});
