@@ -49,6 +49,7 @@ import {
 import type { PlatformTenantDto } from "@modules/platform/application/platform.use-cases";
 import { cn } from "@lib/utils";
 import { AgentModelCard } from "./agent-model-card";
+import { VoiceModelCard } from "./voice-model-card";
 import { UsageLimitsCard } from "./usage-limits-card";
 import { RechargesCard } from "./recharges-card";
 
@@ -161,6 +162,8 @@ export function PlatformPanel(): React.ReactElement {
       <UsageLimitsCard month={month} />
 
       <AgentModelCard />
+
+      <VoiceModelCard />
 
       <Card>
         <div className="flex items-center gap-3 border-b border-border p-3">

@@ -23,6 +23,7 @@ USD_COP_RATE="3900"
 
 # Modelos de voz (iguales a los valores por defecto del código)
 GEMINI_TRANSCRIBE_MODEL="gemini-flash-lite-latest"
+# GEMINI_TTS_MODEL solo se usa si no se elige el modelo de voz en /plataforma
 GEMINI_TTS_MODEL="gemini-3.8-flash-lite-tts"
 GEMINI_TTS_FALLBACK_MODEL="gemini-3.8-flash-tts"
 

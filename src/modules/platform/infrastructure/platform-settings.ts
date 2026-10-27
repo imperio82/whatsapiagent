@@ -23,6 +23,11 @@ export async function setPlatformSetting(key: string, value: string): Promise<vo
   cache.set(key, { value, at: Date.now() });
 }
 
+export async function clearPlatformSetting(key: string): Promise<void> {
+  await prisma.platformSetting.deleteMany({ where: { key } });
+  cache.set(key, { value: null, at: Date.now() });
+}
+
 /**
  * Cómo se aplican los límites de uso. "registro" (fase 1 del documento): se calcula y se registra qué
  * habría pasado, pero el agente sigue como antes. "activo": al llegar al tope hay gracia y mensaje de espera.
