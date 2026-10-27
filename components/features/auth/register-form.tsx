@@ -13,6 +13,7 @@ import { Input } from "@components/ui/input";
 import { Label } from "@components/ui/label";
 import { api } from "@services/api-client";
 import { cn } from "@lib/utils";
+import { PRIVACY_URL, TERMS_URL } from "@shared/domain/legal";
 
 const BUSINESS_TYPES = [
   {
@@ -47,6 +48,7 @@ const schema = z.object({
   ownerName: z.string().min(2, "Mínimo 2 caracteres").max(80),
   ownerEmail: z.string().email("Email inválido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: "Debes aceptar para crear la cuenta" }) }),
 });
 
 type Values = z.infer<typeof schema>;
@@ -151,6 +153,23 @@ export function RegisterForm(): React.ReactElement {
         <Label htmlFor="password">Contraseña</Label>
         <Input id="password" type="password" {...register("password")} />
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+      </div>
+      <div className="space-y-1">
+        <label className="flex items-start gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-wa" {...register("acceptTerms")} />
+          <span>
+            Acepto los{" "}
+            <a href={TERMS_URL} target="_blank" rel="noopener" className="font-medium text-foreground underline">
+              términos del servicio
+            </a>{" "}
+            y la{" "}
+            <a href={PRIVACY_URL} target="_blank" rel="noopener" className="font-medium text-foreground underline">
+              política de tratamiento de datos
+            </a>
+            , y autorizo el tratamiento de mis datos. Los mensajes de WhatsApp los cobra Meta aparte.
+          </span>
+        </label>
+        {errors.acceptTerms && <p className="text-xs text-destructive">{errors.acceptTerms.message}</p>}
       </div>
       <Button type="submit" className="w-full" disabled={submitting}>
         {submitting && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -10,6 +10,7 @@ const registerSchema = z.object({
   ownerEmail: z.string().email(),
   ownerName: z.string().min(2).max(80),
   password: z.string().min(8).max(128),
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: "Debes aceptar los términos del servicio y la política de datos" }) }),
 });
 
 export class AuthController {
@@ -19,8 +20,8 @@ export class AuthController {
     this.registerUseCase = new RegisterTenantUseCase(new BcryptHasher());
   }
 
-  async registerTenant(body: unknown): Promise<{ tenantId: string; userId: string; slug: string }> {
-    const input = registerSchema.parse(body);
-    return this.registerUseCase.execute(input);
+  async registerTenant(body: unknown, ip: string | null): Promise<{ tenantId: string; userId: string; slug: string }> {
+    const { acceptTerms: _accepted, ...input } = registerSchema.parse(body);
+    return this.registerUseCase.execute({ ...input, acceptedFromIp: ip });
   }
 }

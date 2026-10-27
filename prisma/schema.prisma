@@ -97,6 +97,11 @@ model Tenant {
   reminders       Reminder[]
   billingEntries  BillingEntry[]
   recharges       Recharge[]
+  /// Aceptación de los términos del servicio y la política de datos: cuándo, qué versión, quién y desde qué IP
+  termsAcceptedAt   DateTime?
+  termsVersion      String?
+  termsAcceptedById String?
+  termsAcceptedIp   String?
   collections     Collection[]
   agentVoice      AgentVoice?
   clonedVoices    ClonedVoice[]

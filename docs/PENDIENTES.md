@@ -27,7 +27,7 @@ Hacerlo **después del punto 1**, cuando la IA ya responda:
   ```
   npx prisma migrate deploy
   ```
-  Las migraciones son `20261025100000_ai_reply_delay`, `20261025200000_agent_personality`, `20261025300000_reminders`, `20261026000000_agent_permissions`, `20261026100000_visit_confirmation_skill`, `20261026200000_platform_settings`, `20261027100000_usage_limits` y `20261027200000_collections`.
+  Las migraciones son `20261025100000_ai_reply_delay`, `20261025200000_agent_personality`, `20261025300000_reminders`, `20261026000000_agent_permissions`, `20261026100000_visit_confirmation_skill`, `20261026200000_platform_settings`, `20261027100000_usage_limits`, `20261027200000_collections` y `20261027300000_terms_acceptance`.
 
 ## 4. Dominio y nombre de la marca
 
@@ -93,21 +93,39 @@ Hacerlo **después del punto 1**, cuando la IA ya responda:
 - [ ] Sincronizar una tabla desde Google Sheets o una base de datos, como las fuentes de datos. Hoy solo se sube por archivo.
 - [ ] Editar filas a mano desde el panel.
 
-## 7. Revisar
+## 7. Legal (docs/legal)
+
+**Hecho:**
+- Borradores del **contrato de servicio** (`contrato-de-servicio.md`) y de la **política de tratamiento de datos** (`politica-tratamiento-datos.md`).
+  - El contrato incluye, como anexo, el contrato de transmisión de datos que exige el Decreto 1074 de 2015.
+- Publicados en la landing: `/terminos` y `/privacidad`.
+- El registro pide aceptarlos. Queda guardada la fecha, la versión, el usuario y la IP en `tenants`.
+- El agente ya no niega ser un asistente automático cuando se lo preguntan.
+
+**Falta:**
+- [ ] **Revisión de un abogado** antes de publicar.
+- [ ] Completar los `[COMPLETAR]`: razón social, NIT, dirección, correo y teléfono para datos, ciudad de los jueces, IVA y fecha de vigencia.
+- [ ] Revisar con el abogado si hay que inscribir las bases en el RNBD de la SIC.
+- [ ] Hacer el estudio de impacto de privacidad para el uso de IA (Circular 002 de 2024).
+- [ ] Confirmar que la clave de Gemini es del plan de pago, que no usa los datos para entrenar.
+- [ ] Los negocios que ya existen no aceptaron los términos: pedirles que los acepten.
+- [ ] Opcional: un aviso de datos que el negocio pueda poner en el primer mensaje del agente a cada cliente final.
+
+## 8. Revisar
 
 - [ ] **Recordatorios y la ventana de 24 horas de Meta.** Los recordatorios de cita, seguimiento y libres se envían como texto libre. Con la API de Meta, si el cliente lleva más de 24 horas sin escribir, el mensaje **no se entrega** a menos que use una plantilla aprobada. Lo más expuesto son los recordatorios de cita: alguien que agendó hace días no escribe desde entonces. Opciones:
   1. Crear plantillas aprobadas en Meta para recordatorio de cita y seguimiento, y usarlas cuando la ventana esté cerrada.
   2. Como mínimo, mostrarle al asesor que el mensaje no salió.
 - [x] **Costo con caché.** Confirmada en producción: entre el 55 % y el 65 % de la entrada sale de la caché. Ahora se guarda `cachedTokensIn` y se descuenta del costo.
 
-## 8. Ahorro de tokens que quedó sin hacer
+## 9. Ahorro de tokens que quedó sin hacer
 
 No se hizo para no afectar la calidad de las respuestas. Primero hay que armar una prueba (eval) con conversaciones reales para comparar antes y después.
 
 - [ ] Acortar las descripciones de las herramientas. Los esquemas suman unos 2.400 tokens por llamada en el especialista comprador.
 - [ ] Recortar el historial de la conversación que se envía en cada turno.
 
-## 9. Opcional
+## 10. Opcional
 
 - [ ] Hacer commit de `docs/datos-prueba/`: Excel y CSV de prueba para la inmobiliaria.
 - [ ] Completar las variables de entorno que faltan: ver [VARIABLES-ENTORNO-PENDIENTES.md](VARIABLES-ENTORNO-PENDIENTES.md).
