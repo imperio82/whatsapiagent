@@ -49,6 +49,8 @@ import {
 import type { PlatformTenantDto } from "@modules/platform/application/platform.use-cases";
 import { cn } from "@lib/utils";
 import { AgentModelCard } from "./agent-model-card";
+import { UsageLimitsCard } from "./usage-limits-card";
+import { RechargesCard } from "./recharges-card";
 
 const SELECT =
   "flex h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -128,7 +130,11 @@ export function PlatformPanel(): React.ReactElement {
           icon={Cpu}
           label="Tokens del mes"
           value={totals ? compact.format(totals.tokensIn + totals.tokensOut) : "—"}
-          hint={totals ? `${compact.format(totals.tokensIn)} entrada · ${compact.format(totals.tokensOut)} salida` : undefined}
+          hint={
+            totals
+              ? `${compact.format(totals.tokensIn)} entrada (${compact.format(totals.cachedTokensIn)} en caché) · ${compact.format(totals.tokensOut)} salida`
+              : undefined
+          }
         />
         <Stat
           icon={PiggyBank}
@@ -149,6 +155,10 @@ export function PlatformPanel(): React.ReactElement {
           warn={!!totals && totals.overdue > 0}
         />
       </div>
+
+      <RechargesCard />
+
+      <UsageLimitsCard month={month} />
 
       <AgentModelCard />
 
@@ -332,8 +342,8 @@ export function PlatformPanel(): React.ReactElement {
         </li>
         <li>
           Margen: precio del plan menos el costo de IA; Meta lo paga el negocio. El presupuesto de IA del mes es el del plan más
-          los créditos que le sumes; cuando se gasta, el agente deja de responder. Cliente adicional por encima del cupo:{" "}
-          {cop.format(EXTRA_CHAT_COP)}.
+          los créditos que le sumes. Qué pasa al llegar al cupo o al tope: ver <em>Límites de uso</em>. Cliente adicional por
+          encima del cupo: desde {cop.format(EXTRA_CHAT_COP)}.
         </li>
       </ul>
 

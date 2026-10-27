@@ -33,6 +33,7 @@ export interface CostsDto {
   chats: number;
   aiReplies: number;
   tokensIn: number;
+  cachedTokensIn: number;
   tokensOut: number;
   spentUsd: number;
   /** Lo que te cuesta la IA, en pesos */
@@ -115,6 +116,7 @@ function toCosts(u: TenantUsage, rate: number): CostsDto {
     chats: u.chats,
     aiReplies: u.aiReplies,
     tokensIn: u.tokensIn,
+    cachedTokensIn: u.cachedTokensIn,
     tokensOut: u.tokensOut,
     spentUsd,
     aiCostCop: spentUsd * rate,
@@ -139,6 +141,7 @@ function sumCosts(rows: CostsDto[]): CostsDto {
     chats,
     aiReplies,
     tokensIn: sum("tokensIn"),
+    cachedTokensIn: sum("cachedTokensIn"),
     tokensOut: sum("tokensOut"),
     spentUsd,
     aiCostCop: sum("aiCostCop"),
@@ -178,7 +181,8 @@ export class GetPlatformOverviewUseCase {
     const [usage, payments] = await Promise.all([
       usageByTenant(tenants, period, now),
       prisma.billingEntry.aggregate({
-        where: { kind: "PAYMENT", createdAt: { gte: period.start, lt: period.end } },
+        // Pagos del plan y recargas pagadas (los créditos de cortesía no tienen monto en pesos)
+        where: { createdAt: { gte: period.start, lt: period.end } },
         _sum: { amountCop: true },
       }),
     ]);

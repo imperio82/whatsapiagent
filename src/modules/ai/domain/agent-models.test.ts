@@ -21,3 +21,13 @@ describe("modelos del agente", () => {
     assert.equal(replyCostUsd({ inPerMillion: 0.1, outPerMillion: 0.4 }, 20_000, 600).toFixed(5), "0.00224");
   });
 });
+
+describe("costo con caché", () => {
+  it("los tokens en caché se cobran al 25 % del precio de entrada", async () => {
+    const { estimateCostMicroUsd } = await import("../infrastructure/pricing");
+    // gemini-2.5-flash-lite: US$0,10 entrada. 10.000 tokens sin caché = 1.000 micro-USD
+    assert.equal(estimateCostMicroUsd("gemini-2.5-flash-lite", 10_000, 0), 1000);
+    // 8.000 de esos en caché: 2.000 a precio completo (200) + 8.000 al 25 % (200)
+    assert.equal(estimateCostMicroUsd("gemini-2.5-flash-lite", 10_000, 0, 8_000), 400);
+  });
+});

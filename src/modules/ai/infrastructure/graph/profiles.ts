@@ -24,6 +24,12 @@ export interface GraphProfile {
   routerExceptions?: string;
 }
 
+/**
+ * "¿Con quién hablo?" no es pedir una persona: lo responde el agente con su nombre. Sin esto el router lo
+ * mandaba a "humano", porque la regla de pasar a un asesor dice "el tema no tiene que ver con el inventario".
+ */
+const IDENTITY_EXCEPTION = `IMPORTANTE: preguntar con quién habla, cómo se llama quien responde, de qué negocio es o si es una persona o un bot ("con quién tengo el gusto", "con quién hablo", "¿eres un robot?") NO es "humano": el agente se presenta con su nombre y sigue atendiendo. Solo es "humano" si pide de forma explícita que lo atienda una persona o un asesor ("quiero hablar con un asesor", "pásame con alguien").`;
+
 const RETAIL: GraphProfile = {
   intents: ["ventas", "pedido", "info"],
   defaultIntent: "ventas",
@@ -34,6 +40,7 @@ const RETAIL: GraphProfile = {
 - "info": horario, envíos o domicilios, medios de pago, dirección, cambios, garantías, el estado de un pedido anterior u otras políticas.
 - "humano": pide hablar con una persona, está molesto o se queja, o el tema no tiene que ver con el negocio.
 Si dudas entre ventas y otra, elige "ventas".`,
+  routerExceptions: IDENTITY_EXCEPTION.replace("el agente se presenta", "es \"ventas\": el agente se presenta"),
   specialists: {
     ventas: {
       tools: ["search_products", "get_business_info", "save_client_info", "save_special_date"],
@@ -73,7 +80,8 @@ const BROKERAGE: GraphProfile = {
 - "info": horario, dirección, cómo trabaja el negocio, formas de pago en general u otras políticas.
 - "humano": pide hablar con una persona del negocio, está molesto o se queja, o el tema no tiene que ver con el negocio.
 Si dudas, elige "comprador".`,
-  routerExceptions: `IMPORTANTE: pedir el teléfono, el nombre o la dirección del DUEÑO o PROPIETARIO de un bien, o querer "hablar directo con el dueño", NO es "humano": es "comprador". El agente de compradores le explica que todo se coordina con un asesor y sigue atendiéndolo.`,
+  routerExceptions: `IMPORTANTE: pedir el teléfono, el nombre o la dirección del DUEÑO o PROPIETARIO de un bien, o querer "hablar directo con el dueño", NO es "humano": es "comprador". El agente de compradores le explica que todo se coordina con un asesor y sigue atendiéndolo.
+${IDENTITY_EXCEPTION.replace("el agente se presenta", "es \"comprador\": el agente se presenta")}`,
   specialists: {
     comprador: {
       tools: ["search_listings", "get_listing", "qualify_lead", "check_availability", "request_visit", "cancel_visit", "register_offer", "simulate_payment", "save_client_info", "save_special_date", "get_business_info"],

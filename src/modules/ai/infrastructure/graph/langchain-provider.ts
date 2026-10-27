@@ -36,12 +36,13 @@ export class LangChainProvider implements AIProvider {
       new SystemMessage(input.systemPrompt),
       ...input.messages.map((m) => (m.role === "assistant" ? new AIMessage(m.content) : new HumanMessage(m.content))),
     ];
-    const usage = { tokensIn: 0, tokensOut: 0, toolCalls: 0 };
+    const usage = { tokensIn: 0, cachedTokensIn: 0, tokensOut: 0, toolCalls: 0 };
     const limit = input.maxToolSteps ?? MAX_TOOL_STEPS;
 
     for (let step = 0; step <= limit; step++) {
       const ai = (await model.invoke(messages)) as AIMessage;
       usage.tokensIn += ai.usage_metadata?.input_tokens ?? 0;
+      usage.cachedTokensIn += ai.usage_metadata?.input_token_details?.cache_read ?? 0;
       usage.tokensOut += ai.usage_metadata?.output_tokens ?? 0;
       messages.push(ai);
       if (!ai.tool_calls?.length || step === limit) {

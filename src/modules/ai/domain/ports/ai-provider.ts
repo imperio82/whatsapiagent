@@ -40,6 +40,8 @@ export interface ChatTurnOutput {
   tokensOut: number;
   /** Modelo concreto que generó la respuesta (para costear el uso). */
   model: string;
+  /** Parte de tokensIn servida desde la caché del proveedor, si la reporta */
+  cachedTokensIn?: number;
 }
 
 export type AIProviderKind = "openai" | "gemini";
