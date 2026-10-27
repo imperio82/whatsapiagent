@@ -161,7 +161,15 @@ export interface PromptRule {
   category: AiRuleCategoryValue;
   title: string;
   content: string;
+  /** La colección que usa la habilidad y qué puede hacer en ella */
+  table?: { id: string; name: string; access: "read" | "update" | "write" } | null;
 }
+
+const TABLE_ACCESS_HINT: Record<"read" | "update" | "write", string> = {
+  read: "consúltala con search_table",
+  update: "consúltala con search_table y cambia filas con update_table_row",
+  write: "consúltala con search_table, agrega filas con add_table_row y cambia filas con update_table_row",
+};
 
 /** Reglas activas del negocio, agrupadas, como sección del prompt. */
 export function formatBusinessRules(rules: PromptRule[]): string {
@@ -170,9 +178,10 @@ export function formatBusinessRules(rules: PromptRule[]): string {
     .map((category) => {
       const items = rules.filter((r) => r.category === category);
       if (items.length === 0) return "";
-      const lines = items.map((r, i) =>
-        category === "QUALIFICATION" ? `${i + 1}. ${r.title}: ${r.content}` : `- ${r.title}: ${r.content}`,
-      );
+      const lines = items.map((r, i) => {
+        const table = r.table ? ` (usa la tabla "${r.table.name}": ${TABLE_ACCESS_HINT[r.table.access]})` : "";
+        return category === "QUALIFICATION" ? `${i + 1}. ${r.title}: ${r.content}${table}` : `- ${r.title}: ${r.content}${table}`;
+      });
       return `${RULE_CATEGORY_LABELS[category].toUpperCase()}:\n${lines.join("\n")}`;
     })
     .filter(Boolean);

@@ -75,37 +75,37 @@ model Tenant {
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
 
-  memberships     Membership[]
-  roles           Role[]
-  products        Product[]
-  templates       MessageTemplate[]
-  clients         Client[]
-  leads           Lead[]
-  orders          Order[]
-  conversations   Conversation[]
-  whatsappAccount WhatsappAccount?
-  aiRules         AiRule[]
-  listings        Listing[]
-  appointments    Appointment[]
-  listingMatches  ListingMatch[]
-  integrations    Integration[]
-  integrationApps IntegrationApp[]
-  dataSources     DataSource[]
-  clientDates     ClientDate[]
-  clientRelations ClientRelation[]
-  greetings       Greeting[]
-  reminders       Reminder[]
-  billingEntries  BillingEntry[]
-  recharges       Recharge[]
+  memberships       Membership[]
+  roles             Role[]
+  products          Product[]
+  templates         MessageTemplate[]
+  clients           Client[]
+  leads             Lead[]
+  orders            Order[]
+  conversations     Conversation[]
+  whatsappAccount   WhatsappAccount?
+  aiRules           AiRule[]
+  listings          Listing[]
+  appointments      Appointment[]
+  listingMatches    ListingMatch[]
+  integrations      Integration[]
+  integrationApps   IntegrationApp[]
+  dataSources       DataSource[]
+  clientDates       ClientDate[]
+  clientRelations   ClientRelation[]
+  greetings         Greeting[]
+  reminders         Reminder[]
+  billingEntries    BillingEntry[]
+  recharges         Recharge[]
   /// Aceptación de los términos del servicio y la política de datos: cuándo, qué versión, quién y desde qué IP
   termsAcceptedAt   DateTime?
   termsVersion      String?
   termsAcceptedById String?
   termsAcceptedIp   String?
-  collections     Collection[]
-  agentVoice      AgentVoice?
-  clonedVoices    ClonedVoice[]
-  voiceClips      VoiceClip[]
+  collections       Collection[]
+  agentVoice        AgentVoice?
+  clonedVoices      ClonedVoice[]
+  voiceClips        VoiceClip[]
 
   @@map("tenants")
 }
@@ -156,6 +156,7 @@ model Collection {
 
   tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rows   CollectionRow[]
+  skills AiRule[]
 
   @@unique([tenantId, name])
   @@map("collections")
@@ -728,19 +729,23 @@ model WhatsappAccount {
 // negocio las cambie sin tocar código. Las instrucciones técnicas (cómo usar cada
 // herramienta) siguen en el código.
 model AiRule {
-  id        String         @id @default(cuid())
-  tenantId  String
-  category  AiRuleCategory
-  title     String
-  content   String
-  isActive  Boolean        @default(true)
-  position  Int            @default(0)
+  id               String         @id @default(cuid())
+  tenantId         String
+  category         AiRuleCategory
+  title            String
+  content          String
+  isActive         Boolean        @default(true)
+  position         Int            @default(0)
   // Identifica las reglas que vienen por defecto, para poder restaurarlas
-  systemKey String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  systemKey        String?
+  // Opcional: la colección que la habilidad usa y qué puede hacer en ella ("read", "update" o "write")
+  collectionId     String?
+  collectionAccess String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, systemKey])
   @@index([tenantId, isActive])

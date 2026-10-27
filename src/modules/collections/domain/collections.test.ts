@@ -1,6 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { collectionsCatalog, normalizeText, prepareTable, rankRows, searchTextOf, tableFromJson } from "./collections";
+import {
+  collectionsCatalog,
+  normalizeText,
+  prepareTable,
+  rankRows,
+  rowValuesFor,
+  searchTextOf,
+  tableAccessByName,
+  tableFromJson,
+} from "./collections";
 
 describe("colecciones", () => {
   it("convierte un JSON anidado en tabla", () => {
@@ -42,5 +51,22 @@ describe("colecciones", () => {
     const text = collectionsCatalog([{ name: "Sedes", description: "Horarios por sede", columns: ["sede", "horario"], rowCount: 3 }]);
     assert.match(text!, /"Sedes": Horarios por sede \(3 filas; columnas: sede, horario\)/);
     assert.equal(collectionsCatalog([]), null);
+  });
+
+  it("las habilidades dan el acceso más alto por tabla", () => {
+    const access = tableAccessByName([
+      { table: "Reservas", access: "read" },
+      { table: "Reservas", access: "write" },
+      { table: "Sedes", access: "update" },
+      { table: "Sedes", access: "read" },
+    ]);
+    assert.equal(access.get("Reservas"), "write");
+    assert.equal(access.get("Sedes"), "update");
+  });
+
+  it("acomoda los valores a las columnas de la tabla", () => {
+    const { values, unknown } = rowValuesFor(["Nombre", "Teléfono", "Fecha"], { nombre: " Ana ", telefono: 3001234567, color: "rojo" });
+    assert.deepEqual(values, { Nombre: "Ana", Teléfono: "3001234567" });
+    assert.deepEqual(unknown, ["color"]);
   });
 });

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Plus, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, RotateCcw, ShieldCheck, Table2, Trash2 } from "lucide-react";
 import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
@@ -24,7 +24,9 @@ import {
   useRestoreAiRules,
   useUpdateAiRule,
 } from "@hooks/use-ai-rules";
+import { useCollections } from "@hooks/use-collections";
 import { useCurrentTenant } from "@hooks/use-tenant";
+import { TABLE_ACCESS, TABLE_ACCESS_LABELS, type TableAccess } from "@modules/collections/domain/collections";
 import { RULE_CATEGORY_LABELS, type AiRuleCategoryValue } from "@modules/ai/domain/default-rules";
 import type { AiRuleDto } from "@modules/ai/application/ai-rules.use-cases";
 
@@ -162,6 +164,15 @@ export function AgentSkills({ embedded = false }: { embedded?: boolean }): React
                       />
                     </div>
                     <p className="flex-1 whitespace-pre-line text-sm text-muted-foreground">{rule.content}</p>
+                    {rule.table && (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <Table2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <Link href={`/colecciones/${rule.table.id}`} className="truncate font-medium hover:underline">
+                          {rule.table.name}
+                        </Link>
+                        <span className="text-muted-foreground">· {TABLE_ACCESS_LABELS[rule.table.access]}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <div className="flex flex-wrap gap-1">
                         {rule.isDefault && <Badge variant="secondary">Por defecto</Badge>}
@@ -209,7 +220,12 @@ function SkillDialog({ editing, onClose }: { editing: Editing; onClose: () => vo
   const [category, setCategory] = useState<AiRuleCategoryValue>("POLICY");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [collectionId, setCollectionId] = useState("");
+  const [access, setAccess] = useState<TableAccess>("read");
   const [openedFor, setOpenedFor] = useState<Editing>(null);
+  // Solo las tablas que sube el negocio: el inventario y los productos tienen sus propios permisos
+  const { data: allCollections } = useCollections();
+  const collections = (allCollections ?? []).filter((c) => !c.system);
 
   // Al abrir el diálogo se cargan los valores de la habilidad (o vacíos si es nueva)
   if (editing !== openedFor) {
@@ -217,13 +233,21 @@ function SkillDialog({ editing, onClose }: { editing: Editing; onClose: () => vo
     setCategory(initial?.category ?? (editing?.mode === "create" ? editing.category : "POLICY"));
     setTitle(initial?.title ?? "");
     setContent(initial?.content ?? "");
+    setCollectionId(initial?.table?.id ?? "");
+    setAccess(initial?.table?.access ?? "read");
   }
 
   const pending = create.isPending || update.isPending;
   const valid = title.trim().length >= 2 && content.trim().length >= 5;
 
   async function save() {
-    const input = { category, title: title.trim(), content: content.trim() };
+    const input = {
+      category,
+      title: title.trim(),
+      content: content.trim(),
+      collectionId: collectionId || null,
+      collectionAccess: collectionId ? access : null,
+    };
     if (initial) await update.mutateAsync({ id: initial.id, input });
     else await create.mutateAsync(input);
     onClose();
@@ -273,6 +297,51 @@ function SkillDialog({ editing, onClose }: { editing: Editing; onClose: () => vo
                   : "Ej: Nunca envíes la placa completa del vehículo; solo los dos últimos números si la piden."
               }
             />
+          </div>
+          <div className="space-y-2 rounded-md border border-border p-3">
+            <Label htmlFor="rule-collection">Colección (opcional)</Label>
+            <select id="rule-collection" className={SELECT} value={collectionId} onChange={(e) => setCollectionId(e.target.value)}>
+              <option value="">Ninguna</option>
+              {collections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {collectionId ? (
+              <div className="space-y-1.5">
+                <div role="radiogroup" aria-label="Qué puede hacer en la tabla" className="flex flex-wrap gap-1">
+                  {TABLE_ACCESS.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      role="radio"
+                      aria-checked={access === a}
+                      onClick={() => setAccess(a)}
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        access === a ? "border-wa bg-wa/15 text-foreground" : "border-border text-muted-foreground hover:bg-accent/50"
+                      }`}
+                    >
+                      {TABLE_ACCESS_LABELS[a]}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {access === "read"
+                    ? "El agente busca en la tabla cuando aplique esta habilidad."
+                    : access === "update"
+                      ? "Además puede cambiar valores de una fila que ya existe (por ejemplo, marcar una reserva como cancelada)."
+                      : "Además puede agregar filas nuevas con lo que diga el cliente (por ejemplo, registrar una reserva)."}{" "}
+                  Explica en la instrucción cuándo y qué columnas llenar.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                {collections.length === 0
+                  ? "Todavía no tienes tablas en Colecciones."
+                  : "Si la habilidad necesita consultar, modificar o crear algo en una tabla, elígela aquí."}
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>

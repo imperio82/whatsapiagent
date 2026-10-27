@@ -5,7 +5,15 @@ import { ConflictError, NotFoundError, ValidationError } from "@shared/domain/er
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { readTabularFile } from "@modules/data-import/infrastructure/file-reader";
 import type { TabularData } from "@modules/data-import/domain/tabular";
-import { COLLECTION_LIMITS, normalizeText, prepareTable, rankRows, searchTextOf, tableFromJson } from "../domain/collections";
+import {
+  COLLECTION_LIMITS,
+  normalizeText,
+  prepareTable,
+  rankRows,
+  rowValuesFor,
+  searchTextOf,
+  tableFromJson,
+} from "../domain/collections";
 import {
   SYSTEM_COLLECTIONS,
   SYSTEM_PREFIX,
@@ -291,9 +299,21 @@ export class DeleteCollectionUseCase {
   }
 }
 
+/** Busca la tabla por nombre entre las que el agente puede usar (igual, o que contenga lo que pidió). */
+async function agentTable(tenantId: string, name: string, allowed: string[]) {
+  const all = await prisma.collection.findMany({
+    where: { tenantId, name: { in: allowed } },
+    select: { id: true, name: true, columns: true, rowCount: true },
+  });
+  const wanted = normalizeText(name);
+  const collection = all.find((c) => normalizeText(c.name) === wanted) ?? all.find((c) => normalizeText(c.name).includes(wanted));
+  return { collection, available: all.map((c) => c.name) };
+}
+
 /** Para la herramienta del agente: busca en una tabla por nombre. Fuera de HTTP, sin TenantContext. */
 export async function searchCollection(
   tenantId: string,
+  allowed: string[],
   name: string,
   query: string | undefined,
   limit: number = COLLECTION_LIMITS.resultRows,
@@ -301,13 +321,8 @@ export async function searchCollection(
   | { ok: true; table: string; columns: string[]; totalRows: number; rows: Record<string, string>[] }
   | { ok: false; error: string; available: string[] }
 > {
-  const all = await prisma.collection.findMany({
-    where: { tenantId, aiEnabled: true },
-    select: { id: true, name: true, columns: true, rowCount: true },
-  });
-  const wanted = normalizeText(name);
-  const collection = all.find((c) => normalizeText(c.name) === wanted) ?? all.find((c) => normalizeText(c.name).includes(wanted));
-  if (!collection) return { ok: false, error: "tabla_inexistente", available: all.map((c) => c.name) };
+  const { collection, available } = await agentTable(tenantId, name, allowed);
+  if (!collection) return { ok: false, error: "tabla_inexistente", available };
 
   const take = Math.min(Math.max(limit, 1), COLLECTION_LIMITS.resultRows);
   const words = normalizeText(query ?? "").split(" ").filter((w) => w.length > 2);
@@ -338,10 +353,86 @@ export async function searchCollection(
   };
 }
 
-/** Las tablas que el agente puede consultar, para describírselas en el prompt. */
-export async function aiCollections(tenantId: string) {
+type RowWriteResult =
+  | { ok: true; table: string; row: Record<string, string> }
+  | { ok: false; error: string; detail?: string; columns?: string[]; candidates?: Record<string, string>[]; available?: string[] };
+
+/** El agente agrega una fila (por ejemplo, una reserva o un pedido especial) con las columnas de la tabla. */
+export async function addCollectionRow(
+  tenantId: string,
+  allowed: string[],
+  name: string,
+  values: Record<string, unknown>,
+): Promise<RowWriteResult> {
+  const { collection, available } = await agentTable(tenantId, name, allowed);
+  if (!collection) return { ok: false, error: "tabla_inexistente", available };
+  const columns = collection.columns as string[];
+  const parsed = rowValuesFor(columns, values);
+  if (parsed.unknown.length > 0) return { ok: false, error: "columnas_inexistentes", detail: parsed.unknown.join(", "), columns };
+  if (!Object.values(parsed.values).some(Boolean)) return { ok: false, error: "fila_vacia", columns };
+  if (collection.rowCount >= COLLECTION_LIMITS.rows) return { ok: false, error: "tabla_llena" };
+
+  const row = Object.fromEntries(columns.map((c) => [c, parsed.values[c] ?? ""]));
+  await prisma.$transaction(async (tx) => {
+    const last = await tx.collectionRow.findFirst({
+      where: { collectionId: collection.id },
+      orderBy: { position: "desc" },
+      select: { position: true },
+    });
+    await tx.collectionRow.create({
+      data: { collectionId: collection.id, position: (last?.position ?? -1) + 1, data: row, searchText: searchTextOf(row) },
+    });
+    await tx.collection.update({ where: { id: collection.id }, data: { rowCount: { increment: 1 } } });
+  });
+  return { ok: true, table: collection.name, row };
+}
+
+/**
+ * El agente cambia valores de una fila que ya existe. La fila se identifica con palabras que solo ella tenga
+ * (un código, un nombre, un teléfono); si coinciden varias, no cambia nada y le devuelve las opciones.
+ */
+export async function updateCollectionRow(
+  tenantId: string,
+  allowed: string[],
+  name: string,
+  find: string,
+  values: Record<string, unknown>,
+): Promise<RowWriteResult> {
+  const { collection, available } = await agentTable(tenantId, name, allowed);
+  if (!collection) return { ok: false, error: "tabla_inexistente", available };
+  const columns = collection.columns as string[];
+  const parsed = rowValuesFor(columns, values);
+  if (parsed.unknown.length > 0) return { ok: false, error: "columnas_inexistentes", detail: parsed.unknown.join(", "), columns };
+  if (Object.keys(parsed.values).length === 0) return { ok: false, error: "sin_cambios", columns };
+
+  const words = normalizeText(find).split(" ").filter(Boolean);
+  if (words.length === 0) return { ok: false, error: "falta_buscar", detail: "Di qué fila cambiar con palabras que solo ella tenga" };
+  const matches = await prisma.collectionRow.findMany({
+    where: { collectionId: collection.id, AND: words.map((w) => ({ searchText: { contains: w } })) },
+    orderBy: { position: "asc" },
+    take: 4,
+    select: { id: true, data: true },
+  });
+  if (matches.length === 0) return { ok: false, error: "fila_no_encontrada" };
+  if (matches.length > 1) {
+    return { ok: false, error: "varias_filas", detail: "Usa palabras más precisas", candidates: matches.slice(0, 3).map((m) => m.data as Record<string, string>) };
+  }
+  const row = { ...(matches[0]!.data as Record<string, string>), ...parsed.values };
+  await prisma.$transaction([
+    prisma.collectionRow.update({ where: { id: matches[0]!.id }, data: { data: row, searchText: searchTextOf(row) } }),
+    // Para que la tabla muestre que cambió
+    prisma.collection.update({ where: { id: collection.id }, data: { rowCount: collection.rowCount } }),
+  ]);
+  return { ok: true, table: collection.name, row };
+}
+
+/**
+ * Las tablas que el agente puede consultar, para describírselas en el prompt: las que tienen el acceso del
+ * agente prendido y las que usa alguna habilidad activa (aunque estén apagadas o vacías).
+ */
+export async function aiCollections(tenantId: string, skillTableIds: string[] = []) {
   const rows = await prisma.collection.findMany({
-    where: { tenantId, aiEnabled: true, rowCount: { gt: 0 } },
+    where: { tenantId, OR: [{ aiEnabled: true, rowCount: { gt: 0 } }, { id: { in: skillTableIds } }] },
     orderBy: { name: "asc" },
     select: { name: true, description: true, columns: true, rowCount: true },
   });

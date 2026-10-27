@@ -135,3 +135,53 @@ export function collectionsCatalog(collections: CollectionSummary[]): string | n
   );
   return `TABLAS DE INFORMACIÓN DEL NEGOCIO (consúltalas con search_table cuando la pregunta tenga que ver con ellas; responde solo con lo que devuelva la herramienta, sin inventar filas ni valores):\n${lines.join("\n")}`;
 }
+
+/**
+ * Lo que una habilidad del agente puede hacer en una colección. Es acumulativo, como los permisos del
+ * agente: modificar incluye consultar, y crear incluye las dos.
+ */
+export const TABLE_ACCESS = ["read", "update", "write"] as const;
+export type TableAccess = (typeof TABLE_ACCESS)[number];
+
+export const TABLE_ACCESS_LABELS: Record<TableAccess, string> = {
+  read: "Consultar",
+  update: "Consultar y modificar",
+  write: "Consultar, modificar y crear",
+};
+
+export function isTableAccess(value: unknown): value is TableAccess {
+  return TABLE_ACCESS.includes(value as TableAccess);
+}
+
+export function tableAccessAtLeast(access: TableAccess, wanted: TableAccess): boolean {
+  return TABLE_ACCESS.indexOf(access) >= TABLE_ACCESS.indexOf(wanted);
+}
+
+/** El acceso más alto por tabla que dan las habilidades activas. */
+export function tableAccessByName(grants: { table: string; access: TableAccess }[]): Map<string, TableAccess> {
+  const result = new Map<string, TableAccess>();
+  for (const { table, access } of grants) {
+    const current = result.get(table);
+    if (!current || tableAccessAtLeast(access, current)) result.set(table, access);
+  }
+  return result;
+}
+
+/**
+ * Los valores que manda el agente, con el nombre de cada columna tal como está en la tabla (se compara sin
+ * tildes ni mayúsculas). Las columnas que no existen se devuelven aparte para decírselo.
+ */
+export function rowValuesFor(columns: string[], values: Record<string, unknown>): { values: Record<string, string>; unknown: string[] } {
+  const byKey = new Map(columns.map((c) => [normalizeText(c), c]));
+  const result: Record<string, string> = {};
+  const unknown: string[] = [];
+  for (const [key, raw] of Object.entries(values)) {
+    const column = byKey.get(normalizeText(key));
+    if (!column) {
+      unknown.push(key);
+      continue;
+    }
+    result[column] = (raw === null || raw === undefined ? "" : String(raw)).trim().slice(0, COLLECTION_LIMITS.cellChars);
+  }
+  return { values: result, unknown };
+}
