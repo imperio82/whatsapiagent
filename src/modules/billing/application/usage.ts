@@ -26,7 +26,7 @@ export interface TenantUsage {
 }
 
 /** Filas de ai_usage_logs que son audio y no respuestas del agente */
-const VOICE_INTENTS = ["voz", "transcripcion"] as const;
+export const VOICE_INTENTS = ["voz", "transcripcion"] as const;
 
 interface TenantPlanRow {
   id: string;

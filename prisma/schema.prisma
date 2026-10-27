@@ -1,4 +1,4 @@
-// whatsAppia - CRM multi-tenant por WhatsApp
+// Atiendo IA - CRM multi-tenant por WhatsApp
 // Schema modelo: todas las entidades de negocio incluyen tenantId
 // para aislamiento por negocio. RBAC granular con permisos por recurso.
 
@@ -533,6 +533,15 @@ model AiUsageLog {
   @@index([tenantId, createdAt])
   @@index([conversationId])
   @@map("ai_usage_logs")
+}
+
+/// Ajustes de toda la plataforma que su dueño cambia desde /plataforma (por ejemplo, el modelo del agente)
+model PlatformSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
 }
 
 enum MessageDirection {

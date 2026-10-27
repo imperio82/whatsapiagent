@@ -1,5 +1,6 @@
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from "@langchain/core/messages";
-import type { AIProvider, ChatTurnInput, ChatTurnOutput } from "../../domain/ports/ai-provider";
+import type { AIProvider, AIProviderKind, ChatTurnInput, ChatTurnOutput } from "../../domain/ports/ai-provider";
+import { envAgentModel, resolveAgentModel } from "../agent-model-setting";
 import { createChatModel } from "./chat-model";
 import { toLangChainTools } from "./lc-tools";
 
@@ -19,16 +20,18 @@ function textOf(message: BaseMessage): string {
  * rápido de WhatsApp y el formato de herramientas que aceptan los modelos actuales.
  */
 export class LangChainProvider implements AIProvider {
-  readonly kind;
-  private readonly info = createChatModel();
+  /** Proveedor de la última respuesta: el modelo se puede cambiar desde /plataforma sin reiniciar */
+  private provider: AIProviderKind = envAgentModel().provider;
 
-  constructor() {
-    this.kind = this.info.provider;
+  get kind(): AIProviderKind {
+    return this.provider;
   }
 
   async chat(input: ChatTurnInput): Promise<ChatTurnOutput> {
+    const info = createChatModel(await resolveAgentModel());
+    this.provider = info.provider;
     const lcTools = toLangChainTools(input.tools);
-    const model = input.tools.length > 0 ? this.info.model.bindTools!([...lcTools.values()]) : this.info.model;
+    const model = input.tools.length > 0 ? info.model.bindTools!([...lcTools.values()]) : info.model;
     const messages: BaseMessage[] = [
       new SystemMessage(input.systemPrompt),
       ...input.messages.map((m) => (m.role === "assistant" ? new AIMessage(m.content) : new HumanMessage(m.content))),
@@ -42,7 +45,7 @@ export class LangChainProvider implements AIProvider {
       usage.tokensOut += ai.usage_metadata?.output_tokens ?? 0;
       messages.push(ai);
       if (!ai.tool_calls?.length || step === limit) {
-        return { text: textOf(ai).trim(), toolCallsUsed: usage.toolCalls, ...usage, model: this.info.modelName };
+        return { text: textOf(ai).trim(), toolCallsUsed: usage.toolCalls, ...usage, model: info.modelName };
       }
       for (const call of ai.tool_calls) {
         const t = lcTools.get(call.name);
@@ -51,6 +54,6 @@ export class LangChainProvider implements AIProvider {
         messages.push(new ToolMessage({ content: output, tool_call_id: call.id ?? call.name }));
       }
     }
-    return { text: "", toolCallsUsed: usage.toolCalls, ...usage, model: this.info.modelName };
+    return { text: "", toolCallsUsed: usage.toolCalls, ...usage, model: info.modelName };
   }
 }

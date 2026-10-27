@@ -311,7 +311,7 @@ function eventFor(a: AppointmentForEvent, start: Date, end: Date, timeZone: stri
     advisor ? `Asesor: ${advisor}` : null,
     `Lo que pidió el cliente: ${a.requestedSlot}`,
     a.notes ? `Notas: ${a.notes}` : null,
-    "Agendado desde WhatsAppIA.",
+    "Agendado desde Atiendo IA.",
   ].filter(Boolean);
   return {
     title: `${what}: ${a.listing?.title ?? "cita"} — ${who}`,

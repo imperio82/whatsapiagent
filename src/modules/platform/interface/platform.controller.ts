@@ -10,6 +10,12 @@ import {
   type PlatformOverviewDto,
   type TenantCostsDto,
 } from "../application/platform.use-cases";
+import {
+  GetAgentModelUseCase,
+  SetAgentModelUseCase,
+  setAgentModelSchema,
+  type AgentModelDto,
+} from "../application/agent-model.use-cases";
 
 export class PlatformController {
   private readonly overviewUC = new GetPlatformOverviewUseCase();
@@ -17,6 +23,8 @@ export class PlatformController {
   private readonly updateUC = new UpdateTenantBillingUseCase();
   private readonly listEntriesUC = new ListBillingEntriesUseCase();
   private readonly addEntryUC = new AddBillingEntryUseCase();
+  private readonly getModelUC = new GetAgentModelUseCase();
+  private readonly setModelUC = new SetAgentModelUseCase();
 
   overview(month: string | null): Promise<PlatformOverviewDto> {
     return this.overviewUC.execute(month);
@@ -36,5 +44,14 @@ export class PlatformController {
 
   addEntry(tenantId: string, ownerUserId: string, body: unknown): Promise<BillingEntryDto> {
     return this.addEntryUC.execute(tenantId, ownerUserId, addBillingEntrySchema.parse(body));
+  }
+
+  agentModel(): Promise<AgentModelDto> {
+    return this.getModelUC.execute();
+  }
+
+  async setAgentModel(body: unknown): Promise<AgentModelDto> {
+    await this.setModelUC.execute(setAgentModelSchema.parse(body));
+    return this.getModelUC.execute();
   }
 }

@@ -84,7 +84,7 @@ export function HandoffAlerts(): React.ReactElement | null {
   // Título de la pestaña titilando mientras haya casos sin atender.
   useEffect(() => {
     if (items.length === 0) return;
-    const original = document.title.startsWith("🔴") ? "whatsAppia" : document.title;
+    const original = document.title.startsWith("🔴") ? "Atiendo IA" : document.title;
     let on = false;
     const timer = setInterval(() => {
       on = !on;
