@@ -1,0 +1,70 @@
+VARIABLES DE RAILWAY · servicio de la app (Atiendo IA)
+Actualizado: 27 de octubre de 2026
+
+Este archivo está en el repositorio: NO escribas aquí claves reales.
+Donde dice <IGUAL> deja en Railway el valor que ya tiene; no lo cambies ni lo borres.
+
+
+== 1. CAMBIAR ==
+
+# El dominio con el que se entra ahora (antes: whatsapiagent-production.up.railway.app)
+AUTH_URL="https://atiendoia.up.railway.app"
+NEXT_PUBLIC_APP_URL="https://atiendoia.up.railway.app"
+
+
+== 2. AGREGAR ==
+
+# Correo EXACTO con el que inicias sesión. Sin esto nadie entra a /plataforma.
+# Si son varios, separados por comas.
+PLATFORM_ADMIN_EMAILS="tu-correo-de-login@ejemplo.com"
+
+# Pesos por dólar del día, para los costos en /plataforma
+USD_COP_RATE="3900"
+
+# Modelos de voz (iguales a los valores por defecto del código)
+GEMINI_TRANSCRIBE_MODEL="gemini-flash-lite-latest"
+GEMINI_TTS_MODEL="gemini-3.8-flash-lite-tts"
+GEMINI_TTS_FALLBACK_MODEL="gemini-3.8-flash-tts"
+
+
+== 3. DEJAR IGUAL ==
+
+DATABASE_URL=<IGUAL>
+AUTH_SECRET=<IGUAL>
+AUTH_TRUST_HOST="true"
+WHATSAPP_PROVIDER="meta"
+BAILEYS_AUTH_DIR=".whatsapp-sessions"
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=<IGUAL>
+WHATSAPP_APP_SECRET=<IGUAL>
+AI_PROVIDER="gemini"
+GEMINI_API_KEY=<IGUAL>
+GEMINI_MODEL="gemini-flash-latest"
+OPENAI_MODEL="gpt-4o-mini"
+
+# NUNCA cambiar: con ella están cifrados los tokens guardados en la base
+SECRETS_ENCRYPTION_KEY=<IGUAL>
+
+# Pueden quedar vacías: el número de Meta y la clave de OpenAI se configuran aparte
+WHATSAPP_PHONE_NUMBER_ID=""
+WHATSAPP_BUSINESS_ACCOUNT_ID=""
+WHATSAPP_ACCESS_TOKEN=""
+OPENAI_API_KEY=""
+
+
+== 4. NO HACE FALTA ==
+
+GEMINI_GRAPH_MODEL   -> el modelo del agente se elige en /plataforma
+NODE_ENV             -> "next start" ya corre en producción
+GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET -> la app de Google se configura en el panel de integraciones
+
+
+== 5. DESPUÉS DE GUARDAR ==
+
+1. Esperar a que Railway termine de desplegar.
+2. Iniciar sesión en https://atiendoia.up.railway.app con un correo de PLATFORM_ADMIN_EMAILS.
+3. Arriba a la derecha aparece el botón "Admin", que lleva a /plataforma.
+   (También está en el menú del usuario: "Admin de la plataforma".)
+
+Antes de quitar el dominio viejo de Railway:
+- Meta: cambiar el webhook a https://atiendoia.up.railway.app/api/v1/whatsapp/webhook
+- Google Cloud: agregar las URIs de redirección con el dominio nuevo (si usas Google Calendar)

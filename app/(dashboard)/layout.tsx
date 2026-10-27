@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@modules/auth/infrastructure/auth-config";
+import { isPlatformOwner } from "@modules/platform/interface/platform-access";
 import { Sidebar } from "@components/layout/sidebar";
 import { Topbar } from "@components/layout/topbar";
 import { HandoffAlerts } from "@components/features/chats/handoff-alerts";
@@ -24,7 +25,11 @@ export default async function DashboardLayout({
         activeTenantId={session.activeTenantId}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar userName={session.user.name ?? "Usuario"} userEmail={session.user.email ?? ""} />
+        <Topbar
+          userName={session.user.name ?? "Usuario"}
+          userEmail={session.user.email ?? ""}
+          platformOwner={isPlatformOwner(session.user)}
+        />
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-7xl px-6 py-6">{children}</div>
         </main>
