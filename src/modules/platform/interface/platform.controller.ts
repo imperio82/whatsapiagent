@@ -17,6 +17,12 @@ import {
   type AgentModelDto,
 } from "../application/agent-model.use-cases";
 import {
+  GetVoiceModelUseCase,
+  SetVoiceModelUseCase,
+  setVoiceModelSchema,
+  type VoiceModelDto,
+} from "../application/voice-model.use-cases";
+import {
   GetUsageLimitsUseCase,
   SetLimitsEnforcementUseCase,
   setEnforcementSchema,
@@ -39,6 +45,8 @@ export class PlatformController {
   private readonly addEntryUC = new AddBillingEntryUseCase();
   private readonly getModelUC = new GetAgentModelUseCase();
   private readonly setModelUC = new SetAgentModelUseCase();
+  private readonly getVoiceModelUC = new GetVoiceModelUseCase();
+  private readonly setVoiceModelUC = new SetVoiceModelUseCase();
   private readonly limitsUC = new GetUsageLimitsUseCase();
   private readonly enforcementUC = new SetLimitsEnforcementUseCase();
   private readonly rechargesUC = new ListPlatformRechargesUseCase();
@@ -72,6 +80,15 @@ export class PlatformController {
   async setAgentModel(body: unknown): Promise<AgentModelDto> {
     await this.setModelUC.execute(setAgentModelSchema.parse(body));
     return this.getModelUC.execute();
+  }
+
+  voiceModel(): Promise<VoiceModelDto> {
+    return this.getVoiceModelUC.execute();
+  }
+
+  async setVoiceModel(body: unknown): Promise<VoiceModelDto> {
+    await this.setVoiceModelUC.execute(setVoiceModelSchema.parse(body));
+    return this.getVoiceModelUC.execute();
   }
 
   limits(month: string | null): Promise<UsageLimitsDto> {

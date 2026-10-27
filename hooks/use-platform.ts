@@ -6,6 +6,7 @@ import { platformService } from "@services/platform.service";
 import { ApiError } from "@services/api-client";
 import type { AddBillingEntryInput, UpdateTenantBillingInput } from "@modules/platform/application/platform.use-cases";
 import type { SetAgentModelInput } from "@modules/platform/application/agent-model.use-cases";
+import type { SetVoiceModelInput } from "@modules/platform/application/voice-model.use-cases";
 import type { SetEnforcementInput } from "@modules/platform/application/usage-limits.use-cases";
 import type { ResolveRechargeInput } from "@modules/platform/application/recharges-admin.use-cases";
 
@@ -71,6 +72,22 @@ export function useSetAgentModel() {
     onSuccess: (data) => {
       qc.setQueryData([KEY, "agent-model"], data);
       toast.success(`El agente ahora responde con ${data.current.modelName}`);
+    },
+    onError,
+  });
+}
+
+export function useVoiceModel() {
+  return useQuery({ queryKey: [KEY, "voice-model"], queryFn: () => platformService.voiceModel() });
+}
+
+export function useSetVoiceModel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SetVoiceModelInput) => platformService.setVoiceModel(input),
+    onSuccess: (data) => {
+      qc.setQueryData([KEY, "voice-model"], data);
+      toast.success(`Las notas de voz ahora salen con ${data.current.modelName}`);
     },
     onError,
   });

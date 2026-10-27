@@ -12,11 +12,11 @@ import {
   elevenLabsConfigured,
   elevenLabsModel,
   geminiConfigured,
-  geminiTtsModel,
   listElevenLabsVoices,
   synthesizeSpeech,
 } from "../infrastructure/speech";
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd } from "../infrastructure/voice-pricing";
+import { resolveTtsModel } from "../infrastructure/voice-model-setting";
 import { loadVoiceSettings, logVoiceUsage, type VoiceSettings } from "./voice-runtime";
 
 
@@ -75,7 +75,7 @@ export class GetVoiceSettingsUseCase {
       voices: await voiceOptions(tenantId),
       defaultStyle: DEFAULT_VOICE_STYLE,
       costPerNoteUsd: {
-        GEMINI: geminiTtsCostMicroUsd(geminiTtsModel(), 120, TYPICAL_SECONDS * 25) / 1_000_000,
+        GEMINI: geminiTtsCostMicroUsd((await resolveTtsModel()).modelName, 120, TYPICAL_SECONDS * 25) / 1_000_000,
         ELEVENLABS: elevenLabsCostMicroUsd(TYPICAL_CHARS) / 1_000_000,
       },
     };

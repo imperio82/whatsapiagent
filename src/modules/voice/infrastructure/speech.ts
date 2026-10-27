@@ -2,6 +2,7 @@ import { InfrastructureError } from "@shared/domain/errors";
 import { speakableText, type VoiceProviderKind } from "../domain/voice-policy";
 import { encodeOggOpus, parseWav, pcmSeconds, type PcmAudio } from "./ogg-opus";
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd, transcriptionCostMicroUsd } from "./voice-pricing";
+import { resolveTtsModel } from "./voice-model-setting";
 
 /**
  * Voz con Gemini (incluida, con la misma clave del agente) y ElevenLabs (voces premium y clonadas).
@@ -11,8 +12,6 @@ import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd, transcriptionCostMicroUs
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
 
-/** El de menor costo que da buena voz en español; se cambia con GEMINI_TTS_MODEL. */
-export const geminiTtsModel = (): string => process.env.GEMINI_TTS_MODEL ?? "gemini-3.8-flash-lite-tts";
 /**
  * Si el principal falla por cupo (por ejemplo, el límite diario del plan gratuito) o por un error
  * pasajero, se intenta con este antes de responder por texto.
@@ -55,13 +54,19 @@ export async function synthesizeSpeech(input: SpeechInput): Promise<SynthesizedV
 }
 
 async function geminiSpeech(voiceName: string, style: string | null | undefined, text: string): Promise<SynthesizedVoice> {
+  const { modelName } = await resolveTtsModel();
   try {
-    return await geminiSpeechWith(geminiTtsModel(), voiceName, style, text);
+    return await geminiSpeechWith(modelName, voiceName, style, text);
   } catch (err) {
-    if (!(err instanceof RetryableVoiceError) || geminiTtsFallbackModel() === geminiTtsModel()) throw err;
+    if (!(err instanceof RetryableVoiceError) || geminiTtsFallbackModel() === modelName) throw err;
     console.warn(`[voz] ${err.message}; se intenta con ${geminiTtsFallbackModel()}`);
     return geminiSpeechWith(geminiTtsFallbackModel(), voiceName, style, text);
   }
+}
+
+/** Prueba un modelo con una frase corta, sin respaldo: así se sabe si ese modelo en sí funciona. */
+export function testGeminiTts(model: string): Promise<SynthesizedVoice> {
+  return geminiSpeechWith(model, "Kore", null, "Hola, esta es una prueba de voz.");
 }
 
 class RetryableVoiceError extends InfrastructureError {}
