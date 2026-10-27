@@ -18,6 +18,7 @@ import {
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd } from "../infrastructure/voice-pricing";
 import { resolveTtsModel } from "../infrastructure/voice-model-setting";
 import { loadVoiceSettings, logVoiceUsage, type VoiceSettings } from "./voice-runtime";
+import { saleValueUsd } from "@modules/billing/domain/plans";
 
 
 /** Lo que dicen el botón «Escuchar» y la primera prueba de una voz clonada. */
@@ -74,9 +75,10 @@ export class GetVoiceSettingsUseCase {
       },
       voices: await voiceOptions(tenantId),
       defaultStyle: DEFAULT_VOICE_STYLE,
+      // A precio de venta, como el resto de lo que ve el negocio
       costPerNoteUsd: {
-        GEMINI: geminiTtsCostMicroUsd((await resolveTtsModel()).modelName, 120, TYPICAL_SECONDS * 25) / 1_000_000,
-        ELEVENLABS: elevenLabsCostMicroUsd(TYPICAL_CHARS) / 1_000_000,
+        GEMINI: saleValueUsd(geminiTtsCostMicroUsd((await resolveTtsModel()).modelName, 120, TYPICAL_SECONDS * 25) / 1_000_000),
+        ELEVENLABS: saleValueUsd(elevenLabsCostMicroUsd(TYPICAL_CHARS) / 1_000_000),
       },
     };
   }
@@ -200,7 +202,7 @@ export class PreviewVoiceUseCase {
       costMicroUsd: voice.costMicroUsd,
       detail: `prueba de la voz ${input.voiceId}`,
     });
-    return { audio: voice.ogg.toString("base64"), seconds: voice.seconds, costUsd: voice.costMicroUsd / 1_000_000 };
+    return { audio: voice.ogg.toString("base64"), seconds: voice.seconds, costUsd: saleValueUsd(voice.costMicroUsd / 1_000_000) };
   }
 }
 

@@ -39,7 +39,7 @@ export function UsageMeter() {
           <button
             type="button"
             className="flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-accent"
-            aria-label={`Gastado este mes: ${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`}
+            aria-label={`Saldo usado este mes: ${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`}
           >
             <Wallet className={cn("h-4 w-4", ratio >= 1 ? "text-destructive" : "text-muted-foreground")} />
             <span className="hidden flex-col items-start leading-tight sm:flex">
@@ -60,8 +60,8 @@ export function UsageMeter() {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <dl className="space-y-1.5 px-2 py-1.5 text-sm">
-            <Row label="IA gastada" value={`${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`} />
-            {data.creditUsd > 0 && <Row label="Créditos sumados" value={usd.format(data.creditUsd)} />}
+            <Row label="Saldo usado" value={`${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`} />
+            {data.creditUsd > 0 && <Row label="Saldo recargado" value={usd.format(data.creditUsd)} />}
             {/* Sin "de X": el saldo se muestra como algo que se recarga, no como un cupo de clientes */}
             <Row label="Clientes atendidos" value={int.format(data.chats)} />
             <Row label="Chats activos (24 h)" value={int.format(data.activeChats)} />

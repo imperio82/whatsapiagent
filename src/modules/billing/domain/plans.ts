@@ -104,6 +104,14 @@ export const USAGE_LIMITS = {
   maxRepliesPerContact: 40,
 } as const;
 
+/**
+ * Lo que vale para el negocio un gasto de IA: el costo dividido por el peso de la IA en el precio (30 %).
+ * Al negocio siempre se le muestra este valor, nunca el costo, igual que el precio del plan.
+ */
+export function saleValueUsd(costUsd: number): number {
+  return costUsd / USAGE_LIMITS.aiShareTarget;
+}
+
 /** Paquetes de recarga: el precio por cliente baja al comprar más y la IA queda por debajo del 30 % */
 export const RECHARGE_PACKS = [
   { clients: 100, priceCop: 30_000 },
