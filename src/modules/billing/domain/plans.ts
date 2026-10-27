@@ -142,20 +142,34 @@ export const EXTRA_CHAT_COP = Math.min(...Object.values(PLANS).map((p) => p.extr
 export const TRIAL_DAYS = 14;
 
 /**
- * Prueba gratis: vale US$ 5 a precio de venta, no a costo. Con la IA en el 30 % del precio
- * (USAGE_LIMITS.aiShareTarget), el tope de gasto real es US$ 1,50, y el cupo es lo que dan US$ 5
- * (~$19.500) al precio por cliente de Emprende ($129.000 / 500 = $258): unos 75 clientes.
+ * Prueba gratis: lo que se regala, en dólares a precio de venta (no a costo). Se cambia en /plataforma;
+ * este es el valor si no se ha configurado.
  */
-export const TRIAL = {
-  valueUsd: 5,
-  aiBudgetUsd: 5 * USAGE_LIMITS.aiShareTarget,
-  chats: 75,
-} as const;
+export const TRIAL_DEFAULT_VALUE_USD = 3;
+export const TRIAL_MAX_VALUE_USD = 50;
 
-/** Los límites con los que se mide el negocio: los de su plan o, si está en prueba, los de la prueba. */
-export function limitsPlan(tier: PlanTier, trial: boolean): Plan {
+export interface TrialLimits {
+  valueUsd: number;
+  /** Tope de gasto real de IA: el valor regalado por el peso de la IA en el precio (30 %) */
+  aiBudgetUsd: number;
+  /** Clientes que da ese valor al precio por cliente de Emprende ($129.000 / 500 = $258) */
+  chats: number;
+}
+
+/** Con US$ 3 y el dólar a $3.900: US$ 0,90 de IA y unos 45 clientes. */
+export function trialLimits(valueUsd: number, usdCopRate: number): TrialLimits {
+  const perClientCop = PLANS.EMPRENDE.priceCop / PLANS.EMPRENDE.chats;
+  return {
+    valueUsd,
+    aiBudgetUsd: Math.round(valueUsd * USAGE_LIMITS.aiShareTarget * 100) / 100,
+    chats: Math.max(1, Math.round((valueUsd * usdCopRate) / perClientCop)),
+  };
+}
+
+/** Los límites con los que se mide el negocio: los de su plan o, si está en prueba (`trial`), los de la prueba. */
+export function limitsPlan(tier: PlanTier, trial: TrialLimits | null): Plan {
   const plan = PLANS[tier];
-  return trial ? { ...plan, name: "Prueba gratis", chats: TRIAL.chats, aiBudgetUsd: TRIAL.aiBudgetUsd } : plan;
+  return trial ? { ...plan, name: "Prueba gratis", chats: trial.chats, aiBudgetUsd: trial.aiBudgetUsd } : plan;
 }
 
 export const MICRO_USD = 1_000_000;

@@ -14,6 +14,8 @@ import {
   type PlanTier,
 } from "@modules/billing/domain/plans";
 import { usageByTenant, type TenantUsage } from "@modules/billing/application/usage";
+import { usdCopRate } from "@modules/billing/application/exchange-rate";
+import { currentTrialLimits } from "@modules/billing/application/trial";
 import { VOICE_PREVIEW_CONVERSATION } from "@modules/voice/domain/voice-policy";
 
 /**
@@ -21,11 +23,7 @@ import { VOICE_PREVIEW_CONVERSATION } from "@modules/voice/domain/voice-policy";
  * mensajes de Meta). Solo la usan rutas envueltas en withPlatformOwner.
  */
 
-/** Pesos por dólar para pasar el costo de IA a pesos; se ajusta con USD_COP_RATE. */
-export function usdCopRate(): number {
-  const rate = Number(process.env.USD_COP_RATE);
-  return Number.isFinite(rate) && rate > 0 ? rate : 3_185;
-}
+export { usdCopRate };
 
 type TenantStatus = "ACTIVE" | "SUSPENDED" | "CANCELLED";
 
@@ -179,13 +177,14 @@ export class GetPlatformOverviewUseCase {
       },
     });
 
-    const [usage, payments] = await Promise.all([
+    const [usage, payments, trialLimits] = await Promise.all([
       usageByTenant(tenants, period, now),
       prisma.billingEntry.aggregate({
         // Pagos del plan y recargas pagadas (los créditos de cortesía no tienen monto en pesos)
         where: { createdAt: { gte: period.start, lt: period.end } },
         _sum: { amountCop: true },
       }),
+      currentTrialLimits(),
     ]);
 
     const rows: PlatformTenantDto[] = tenants.map((t) => {
@@ -208,7 +207,7 @@ export class GetPlatformOverviewUseCase {
           ? { provider: t.whatsappAccount.provider, phone: t.whatsappAccount.displayPhoneNumber, verified: t.whatsappAccount.verified }
           : null,
         // Sin ningún pago del plan sigue en prueba gratis, con su cupo
-        chatLimit: limitsPlan(t.plan, t.billingEntries.length === 0).chats,
+        chatLimit: limitsPlan(t.plan, t.billingEntries.length === 0 ? trialLimits : null).chats,
         activeChats: u.activeChats,
         budgetUsd: u.budgetMicroUsd / MICRO_USD,
         // Como en el total: solo cuenta el precio si está activo y al día

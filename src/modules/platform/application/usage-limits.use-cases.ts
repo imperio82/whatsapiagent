@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { trialTenantIds } from "@modules/billing/application/trial";
+import { currentTrialLimits, trialTenantIds } from "@modules/billing/application/trial";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { MICRO_USD, PLANS, USAGE_LIMITS, monthKey, monthPeriod, type PlanTier } from "@modules/billing/domain/plans";
 import { clientLimit, limitLevel, usageShare, type LimitLevel } from "@modules/billing/domain/usage-limits";
@@ -70,12 +70,13 @@ export class GetUsageLimitsUseCase {
       limitsEnforcement(),
       trialTenantIds(ids),
     ]);
+    const trialLimits = await currentTrialLimits();
     const monthBy = new Map(months.map((m) => [m.tenantId, m]));
 
     const rows: TenantLimitsDto[] = tenants.map((t) => {
       const own = contacts.filter((c) => c.tenantId === t.id);
       const money = spend.get(t.id)!;
-      const snapshot = limitsSnapshot(t.plan, own.length, money, trial.has(t.id));
+      const snapshot = limitsSnapshot(t.plan, own.length, money, trial.has(t.id) ? trialLimits : null);
       const spentUsd = money.spentMicroUsd / MICRO_USD;
       const capReachedAt = monthBy.get(t.id)?.capReachedAt ?? null;
       return {

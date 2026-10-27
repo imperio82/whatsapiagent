@@ -50,6 +50,7 @@ import type { PlatformTenantDto } from "@modules/platform/application/platform.u
 import { cn } from "@lib/utils";
 import { AgentModelCard } from "./agent-model-card";
 import { VoiceModelCard } from "./voice-model-card";
+import { TrialCard } from "./trial-card";
 import { UsageLimitsCard } from "./usage-limits-card";
 import { RechargesCard } from "./recharges-card";
 
@@ -160,6 +161,8 @@ export function PlatformPanel(): React.ReactElement {
       <RechargesCard />
 
       <UsageLimitsCard month={month} />
+
+      <TrialCard />
 
       <AgentModelCard />
 
