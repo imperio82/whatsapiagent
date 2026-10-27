@@ -29,9 +29,9 @@ export default function CollectionsPage(): React.ReactElement {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Colecciones</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Tablas con la información que tu agente necesita y no cabe en productos o inventario: sedes y horarios,
-            tarifas, requisitos, zonas de cobertura, preguntas frecuentes… Súbelas en Excel, CSV o JSON con las columnas
-            que quieras; el agente ve el nombre y la descripción de cada tabla y consulta la que necesite.
+            Toda la información que consulta tu agente, en tablas: tu inventario o tus productos y las tablas que subas
+            (sedes y horarios, tarifas, requisitos, zonas de cobertura, preguntas frecuentes…) en Excel, CSV o JSON con las
+            columnas que quieras. Qué tablas usa el agente lo eliges aquí o en Mi agente → Permisos del agente.
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -57,8 +57,11 @@ export default function CollectionsPage(): React.ReactElement {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 font-semibold">
                       <Table2 className="h-4 w-4 text-muted-foreground" /> {c.name}
+                      {c.system && <Badge variant="secondary">Del sistema</Badge>}
                     </div>
-                    {c.aiEnabled ? (
+                    {c.system && !c.aiEnabled ? (
+                      <Badge variant="secondary">Sin permiso del agente</Badge>
+                    ) : c.aiEnabled ? (
                       <Badge variant="wa">
                         <Sparkles className="mr-1 h-3 w-3" /> La usa el agente
                       </Badge>
@@ -77,10 +80,12 @@ export default function CollectionsPage(): React.ReactElement {
                     {int.format(c.rowCount)} filas · {c.columns.length} columnas: {c.columns.slice(0, 5).join(", ")}
                     {c.columns.length > 5 ? "…" : ""}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    Actualizada {formatDistanceToNow(new Date(c.updatedAt), { locale: es, addSuffix: true })}
-                    {c.sourceName ? ` · ${c.sourceName}` : ""}
-                  </div>
+                  {!c.system && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Actualizada {formatDistanceToNow(new Date(c.updatedAt), { locale: es, addSuffix: true })}
+                      {c.sourceName ? ` · ${c.sourceName}` : ""}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </Link>

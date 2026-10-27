@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ShieldCheck, Sparkles, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ShieldCheck, Sparkles, Table2, X } from "lucide-react";
 import { Button } from "@components/ui/button";
+import { Switch } from "@components/ui/switch";
+import { useCollections, useUpdateCollection } from "@hooks/use-collections";
 import { useCurrentTenant, useUpdateTenant } from "@hooks/use-tenant";
 import {
   AGENT_RESOURCES,
@@ -22,17 +25,32 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
   const { data: tenant } = useCurrentTenant();
   const update = useUpdateTenant();
   const [perms, setPerms] = useState<Record<AgentResource, PermissionLevel> | null>(null);
+  // Las colecciones del sistema (inventario, productos) dependen del permiso de catálogo de arriba
+  const { data: allCollections } = useCollections();
+  const collections = (allCollections ?? []).filter((c) => !c.system);
+  const updateCollection = useUpdateCollection();
+  const [access, setAccess] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (tenant) setPerms(agentPermissionsFrom(tenant.aiPermissions, tenant.agentProfile ?? "RETAIL"));
   }, [tenant]);
+
+  useEffect(() => {
+    if (allCollections) setAccess(Object.fromEntries(allCollections.filter((c) => !c.system).map((c) => [c.id, c.aiEnabled])));
+  }, [allCollections]);
 
   if (!tenant || !perms) return <div className="h-40 animate-pulse rounded-md bg-muted/50" />;
 
   const profile = tenant.agentProfile ?? "RETAIL";
   const resources = resourcesFor(profile);
 
-  function save() {
+  async function save() {
+    const changed = collections.filter((c) => access[c.id] !== undefined && access[c.id] !== c.aiEnabled);
+    try {
+      await Promise.all(changed.map((c) => updateCollection.mutateAsync({ id: c.id, input: { aiEnabled: access[c.id] } })));
+    } catch {
+      return; // el error ya se mostró
+    }
     // Se conservan las áreas del otro perfil, por si el negocio cambia de tipo
     const own = Object.fromEntries(resources.map((r) => [r, perms![r]]));
     update.mutate({ aiPermissions: { ...(tenant!.aiPermissions ?? {}), ...own } }, { onSuccess: onSaved });
@@ -97,8 +115,42 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
         })}
       </div>
 
+      <div className="space-y-2.5 rounded-md border border-border p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-sm font-semibold">
+            <Table2 className="h-4 w-4" /> Colecciones
+          </span>
+          <Link href="/colecciones" className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+            Ver colecciones
+          </Link>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Las tablas que el agente puede consultar. Las que apagues no las ve ni las menciona.{" "}
+          {AGENT_RESOURCES.catalog.levels[profile] ? `Tu ${AGENT_RESOURCES.catalog.label[profile].toLowerCase()} se controla arriba.` : ""}
+        </p>
+        {collections.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Todavía no has subido tablas.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {collections.map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-3 py-2">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{c.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{c.description || `${c.rowCount} filas`}</span>
+                </span>
+                <Switch
+                  checked={access[c.id] ?? c.aiEnabled}
+                  onCheckedChange={(v) => setAccess({ ...access, [c.id]: v })}
+                  aria-label={`El agente puede consultar ${c.name}`}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="flex justify-end">
-        <Button onClick={save} disabled={update.isPending}>
+        <Button onClick={save} disabled={update.isPending || updateCollection.isPending}>
           <Sparkles className="h-4 w-4" /> Guardar cambios
         </Button>
       </div>

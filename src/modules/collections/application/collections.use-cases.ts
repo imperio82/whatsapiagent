@@ -6,6 +6,15 @@ import { prisma } from "@shared/infrastructure/prisma/client";
 import { readTabularFile } from "@modules/data-import/infrastructure/file-reader";
 import type { TabularData } from "@modules/data-import/domain/tabular";
 import { COLLECTION_LIMITS, normalizeText, prepareTable, rankRows, searchTextOf, tableFromJson } from "../domain/collections";
+import {
+  SYSTEM_COLLECTIONS,
+  SYSTEM_PREFIX,
+  filterSystemRows,
+  systemCollectionsOf,
+  systemKindOf,
+  systemTable,
+  type SystemCollectionKind,
+} from "./system-collections";
 
 export interface CollectionDto {
   id: string;
@@ -16,6 +25,8 @@ export interface CollectionDto {
   aiEnabled: boolean;
   sourceName: string | null;
   updatedAt: string;
+  /** Inventario o productos: se ven aquí como tabla, pero se editan en su propia sección */
+  system: { kind: SystemCollectionKind; editHref: string } | null;
 }
 
 export interface CollectionRowsDto {
@@ -54,7 +65,37 @@ function toDto(c: {
     aiEnabled: c.aiEnabled,
     sourceName: c.sourceName,
     updatedAt: c.updatedAt.toISOString(),
+    system: null,
   };
+}
+
+/** Columnas fijas de cada colección del sistema, para la tarjeta de la lista (las características van aparte). */
+const SYSTEM_BASE_COLUMNS: Record<SystemCollectionKind, string[]> = {
+  inventario: ["Código", "Tipo", "Operación", "Título", "Precio", "Ciudad", "Zona", "Estado", "Descripción"],
+  productos: ["Código", "Nombre", "Precio", "Existencias", "Estado", "Descripción"],
+};
+
+function systemDto(
+  kind: SystemCollectionKind,
+  data: { rowCount: number; aiEnabled: boolean; columns?: string[]; updatedAt?: Date | null },
+): CollectionDto {
+  const def = SYSTEM_COLLECTIONS[kind];
+  return {
+    id: `${SYSTEM_PREFIX}${kind}`,
+    name: def.name,
+    description: def.description,
+    columns: data.columns ?? SYSTEM_BASE_COLUMNS[kind],
+    rowCount: data.rowCount,
+    aiEnabled: data.aiEnabled,
+    sourceName: null,
+    updatedAt: (data.updatedAt ?? new Date()).toISOString(),
+    system: { kind, editHref: def.editHref },
+  };
+}
+
+function rejectSystem(id: string): void {
+  const kind = systemKindOf(id);
+  if (kind) throw new ValidationError(`Esta tabla se arma con tu ${SYSTEM_COLLECTIONS[kind].name.toLowerCase()}: edítala allá`);
 }
 
 /** Excel, CSV o JSON a tabla. */
@@ -94,8 +135,11 @@ async function replaceRows(collectionId: string, data: TabularData): Promise<voi
 export class ListCollectionsUseCase {
   async execute(): Promise<CollectionDto[]> {
     const { tenantId } = TenantContext.require();
-    const rows = await prisma.collection.findMany({ where: { tenantId }, orderBy: { name: "asc" } });
-    return rows.map(toDto);
+    const [system, rows] = await Promise.all([
+      systemCollectionsOf(tenantId),
+      prisma.collection.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
+    ]);
+    return [...system.map((s) => systemDto(s.kind, s)), ...rows.map(toDto)];
   }
 }
 
@@ -107,6 +151,8 @@ export const listRowsSchema = z.object({
 export class GetCollectionRowsUseCase {
   async execute(id: string, input: z.infer<typeof listRowsSchema>): Promise<CollectionRowsDto> {
     const { tenantId } = TenantContext.require();
+    const kind = systemKindOf(id);
+    if (kind) return systemRows(tenantId, kind, input);
     const collection = await prisma.collection.findFirst({ where: { id, tenantId } });
     if (!collection) throw new NotFoundError("Colección no encontrada");
 
@@ -131,6 +177,27 @@ export class GetCollectionRowsUseCase {
       pageSize: PAGE_SIZE,
     };
   }
+}
+
+async function systemRows(
+  tenantId: string,
+  kind: SystemCollectionKind,
+  input: z.infer<typeof listRowsSchema>,
+): Promise<CollectionRowsDto> {
+  const [table, info] = await Promise.all([systemTable(tenantId, kind), systemCollectionsOf(tenantId)]);
+  const rows = filterSystemRows(table.rows, input.q);
+  return {
+    collection: systemDto(kind, {
+      rowCount: table.rows.length,
+      aiEnabled: info.find((i) => i.kind === kind)?.aiEnabled ?? false,
+      columns: table.columns,
+      updatedAt: table.updatedAt,
+    }),
+    rows: rows.slice((input.page - 1) * PAGE_SIZE, input.page * PAGE_SIZE),
+    total: rows.length,
+    page: input.page,
+    pageSize: PAGE_SIZE,
+  };
 }
 
 export const collectionMetaSchema = z.object({
@@ -173,6 +240,7 @@ export class CreateCollectionUseCase {
 export class ReplaceCollectionDataUseCase {
   async execute(id: string, file: UploadedFile, sheetName?: string | null): Promise<CollectionDto> {
     authorize("tenant.settings");
+    rejectSystem(id);
     const { tenantId } = TenantContext.require();
     const existing = await prisma.collection.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundError("Colección no encontrada");
@@ -194,6 +262,7 @@ export class ReplaceCollectionDataUseCase {
 export class UpdateCollectionUseCase {
   async execute(id: string, input: Partial<CollectionMetaInput>): Promise<CollectionDto> {
     authorize("tenant.settings");
+    rejectSystem(id);
     const { tenantId } = TenantContext.require();
     const existing = await prisma.collection.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundError("Colección no encontrada");
@@ -215,6 +284,7 @@ export class UpdateCollectionUseCase {
 export class DeleteCollectionUseCase {
   async execute(id: string): Promise<void> {
     authorize("tenant.settings");
+    rejectSystem(id);
     const { tenantId } = TenantContext.require();
     const { count } = await prisma.collection.deleteMany({ where: { id, tenantId } });
     if (count === 0) throw new NotFoundError("Colección no encontrada");
