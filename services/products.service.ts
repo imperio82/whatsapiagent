@@ -21,6 +21,9 @@ export const productsService = {
   list(input: Partial<ListProductsInput> = {}): Promise<Page<ProductDto>> {
     return api.get<Page<ProductDto>>(`/api/v1/products${toQuery(input)}`);
   },
+  get(id: string): Promise<ProductDto> {
+    return api.get<ProductDto>(`/api/v1/products/${id}`);
+  },
   create(input: CreateProductInput): Promise<ProductDto> {
     return api.post<ProductDto>("/api/v1/products", input);
   },

@@ -10,23 +10,23 @@ import { COLLECTION_LIMITS, normalizeText } from "../domain/collections";
 /**
  * Colecciones del sistema: el inventario de bienes y los productos se muestran en Colecciones como una
  * tabla más, para ver en un solo lugar todo lo que el agente consulta. Se leen de sus propias tablas
- * (se editan en Inventario o en Productos) y el agente las busca con sus herramientas de catálogo, así
+ * (cada fila se edita con el formulario del bien o del producto) y el agente las busca con sus herramientas de catálogo, así
  * que el acceso lo da el permiso "catálogo" y no el interruptor de cada colección.
  */
 
 export type SystemCollectionKind = "inventario" | "productos";
 export const SYSTEM_PREFIX = "sistema-";
 
-export const SYSTEM_COLLECTIONS: Record<SystemCollectionKind, { name: string; description: string; editHref: string }> = {
+export const SYSTEM_COLLECTIONS: Record<SystemCollectionKind, { name: string; description: string; importHref: string }> = {
   inventario: {
     name: "Inventario",
-    description: "Los bienes que subiste o importaste en Inventario. El agente los busca con su búsqueda de inventario.",
-    editHref: "/inventario",
+    description: "Tus vehículos e inmuebles. El agente los ofrece y da precios solo de lo que esté aquí.",
+    importHref: "/configuracion/datos?destino=inventario",
   },
   productos: {
     name: "Productos",
     description: "Tu catálogo de productos. El agente busca precios y existencias aquí.",
-    editHref: "/productos",
+    importHref: "/configuracion/datos?destino=productos",
   },
 };
 
@@ -38,7 +38,8 @@ export function systemKindOf(id: string): SystemCollectionKind | null {
 export interface SystemTable {
   kind: SystemCollectionKind;
   columns: string[];
-  rows: Record<string, string>[];
+  /** id = el del bien o el producto, para editarlo desde la colección */
+  rows: { id: string; data: Record<string, string> }[];
   updatedAt: Date | null;
 }
 
@@ -51,6 +52,7 @@ async function inventoryTable(tenantId: string): Promise<SystemTable> {
     orderBy: { code: "asc" },
     take: COLLECTION_LIMITS.rows,
     select: {
+      id: true,
       code: true,
       kind: true,
       operation: true,
@@ -72,7 +74,7 @@ async function inventoryTable(tenantId: string): Promise<SystemTable> {
   const columns = ["Código", "Tipo", "Operación", "Título", "Precio", "Ciudad", "Zona", "Estado", ...extra, "Descripción"];
   const rows = listings.map((l) => {
     const attrs = (l.attributes as Record<string, unknown> | null) ?? {};
-    return {
+    const data: Record<string, string> = {
       Código: l.code,
       Tipo: LISTING_KIND_LABELS[l.kind],
       Operación: LISTING_OPERATION_LABELS[l.operation],
@@ -84,6 +86,7 @@ async function inventoryTable(tenantId: string): Promise<SystemTable> {
       ...Object.fromEntries(extra.map((k) => [k, attrs[k] == null ? "" : String(attrs[k])])),
       Descripción: l.description ?? "",
     };
+    return { id: l.id, data };
   });
   return { kind: "inventario", columns, rows, updatedAt: latest(listings.map((l) => l.updatedAt)) };
 }
@@ -93,16 +96,19 @@ async function productsTable(tenantId: string): Promise<SystemTable> {
     where: { tenantId },
     orderBy: { name: "asc" },
     take: COLLECTION_LIMITS.rows,
-    select: { sku: true, name: true, priceCents: true, currency: true, trackInventory: true, stock: true, status: true, description: true, updatedAt: true },
+    select: { id: true, sku: true, name: true, priceCents: true, currency: true, trackInventory: true, stock: true, status: true, description: true, updatedAt: true },
   });
   const columns = ["Código", "Nombre", "Precio", "Existencias", "Estado", "Descripción"];
   const rows = products.map((p) => ({
-    Código: p.sku ?? "",
-    Nombre: p.name,
-    Precio: new Intl.NumberFormat("es-CO", { style: "currency", currency: p.currency, maximumFractionDigits: 0 }).format(p.priceCents / 100),
-    Existencias: p.trackInventory ? String(p.stock) : "Sin control",
-    Estado: p.status === "ACTIVE" ? "Activo" : "Archivado",
-    Descripción: p.description ?? "",
+    id: p.id,
+    data: {
+      Código: p.sku ?? "",
+      Nombre: p.name,
+      Precio: new Intl.NumberFormat("es-CO", { style: "currency", currency: p.currency, maximumFractionDigits: 0 }).format(p.priceCents / 100),
+      Existencias: p.trackInventory ? String(p.stock) : "Sin control",
+      Estado: p.status === "ACTIVE" ? "Activo" : "Archivado",
+      Descripción: p.description ?? "",
+    },
   }));
   return { kind: "productos", columns, rows, updatedAt: latest(products.map((p) => p.updatedAt)) };
 }
@@ -116,11 +122,11 @@ export function systemTable(tenantId: string, kind: SystemCollectionKind): Promi
 }
 
 /** Filas que tienen todas las palabras de la búsqueda, como en las demás colecciones. */
-export function filterSystemRows(rows: Record<string, string>[], q: string | undefined): Record<string, string>[] {
+export function filterSystemRows<T extends { data: Record<string, string> }>(rows: T[], q: string | undefined): T[] {
   const words = normalizeText(q ?? "").split(" ").filter(Boolean);
   if (words.length === 0) return rows;
   return rows.filter((r) => {
-    const text = normalizeText(Object.values(r).join(" "));
+    const text = normalizeText(Object.values(r.data).join(" "));
     return words.every((w) => text.includes(w));
   });
 }

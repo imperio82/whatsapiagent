@@ -14,6 +14,7 @@ export const listingsService = {
     const qs = params.toString();
     return api.get<ListingDto[]>(`/api/v1/listings${qs ? `?${qs}` : ""}`);
   },
+  get: (id: string) => api.get<ListingDto>(`/api/v1/listings/${id}`),
   create: (input: CreateListingInput) => api.post<ListingDto>("/api/v1/listings", input),
   update: (id: string, input: UpdateListingInput) => api.patch<ListingDto>(`/api/v1/listings/${id}`, input),
   archive: (id: string) => api.delete<void>(`/api/v1/listings/${id}`),

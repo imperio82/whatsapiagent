@@ -42,10 +42,10 @@ const stepsFor = (brokerage: boolean): Step[] => [
   },
   brokerage
     ? {
-        href: "/inventario",
+        href: "/colecciones/sistema-inventario",
         icon: Car,
         title: "2. Aquí agregas el inventario",
-        body: "Con «Agregar bien» cargas vehículos e inmuebles uno por uno, o con «Importar» subes un Excel. El agente solo ofrece y da precios de lo que esté aquí. Después lo encuentras en Colecciones → Inventario, en el ícono de configuración.",
+        body: "Está en Colecciones → Inventario. Con «Agregar bien» cargas vehículos e inmuebles uno por uno y con el lápiz editas cada uno; para subir un Excel, usa «Importar» en el ícono de configuración. El agente solo ofrece y da precios de lo que esté aquí.",
         points: [
           {
             title: "Datos del propietario",
@@ -54,10 +54,10 @@ const stepsFor = (brokerage: boolean): Step[] => [
         ],
       }
     : {
-        href: "/productos",
+        href: "/colecciones/sistema-productos",
         icon: Boxes,
         title: "2. Aquí agregas tus productos",
-        body: "Con «Nuevo producto» cargas tu catálogo uno por uno, o con «Importar» subes un Excel. El agente solo ofrece y da precios de lo que esté aquí. Después lo encuentras en Colecciones → Productos, en el ícono de configuración.",
+        body: "Está en Colecciones → Productos. Con «Nuevo producto» cargas tu catálogo uno por uno y con el lápiz editas cada uno; para subir un Excel, usa «Importar» en el ícono de configuración. El agente solo ofrece y da precios de lo que esté aquí.",
       },
   {
     href: "/clientes",

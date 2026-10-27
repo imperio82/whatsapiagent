@@ -33,13 +33,19 @@ export interface CollectionDto {
   aiEnabled: boolean;
   sourceName: string | null;
   updatedAt: string;
-  /** Inventario o productos: se ven aquí como tabla, pero se editan en su propia sección */
-  system: { kind: SystemCollectionKind; editHref: string } | null;
+  /** Inventario o productos: se ven aquí como tabla y cada fila se edita con su propio formulario */
+  system: { kind: SystemCollectionKind; importHref: string } | null;
+}
+
+export interface CollectionRowDto {
+  /** Id de la fila; en el inventario o los productos, el id del bien o del producto */
+  id: string;
+  data: Record<string, string>;
 }
 
 export interface CollectionRowsDto {
   collection: CollectionDto;
-  rows: Record<string, string>[];
+  rows: CollectionRowDto[];
   /** Filas que coinciden con la búsqueda (o todas) */
   total: number;
   page: number;
@@ -97,13 +103,13 @@ function systemDto(
     aiEnabled: data.aiEnabled,
     sourceName: null,
     updatedAt: (data.updatedAt ?? new Date()).toISOString(),
-    system: { kind, editHref: def.editHref },
+    system: { kind, importHref: def.importHref },
   };
 }
 
 function rejectSystem(id: string): void {
   const kind = systemKindOf(id);
-  if (kind) throw new ValidationError(`Esta tabla se arma con tu ${SYSTEM_COLLECTIONS[kind].name.toLowerCase()}: edítala allá`);
+  if (kind) throw new ValidationError(`Esta tabla se arma con tu ${SYSTEM_COLLECTIONS[kind].name.toLowerCase()}: edita cada fila con su formulario`);
 }
 
 /** Excel, CSV o JSON a tabla. */
@@ -174,12 +180,12 @@ export class GetCollectionRowsUseCase {
         orderBy: { position: "asc" },
         skip: (input.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        select: { data: true },
+        select: { id: true, data: true },
       }),
     ]);
     return {
       collection: toDto(collection),
-      rows: rows.map((r) => r.data as Record<string, string>),
+      rows: rows.map((r) => ({ id: r.id, data: r.data as Record<string, string> })),
       total,
       page: input.page,
       pageSize: PAGE_SIZE,
@@ -207,6 +213,87 @@ async function systemRows(
     pageSize: PAGE_SIZE,
   };
 }
+
+/** Valores de una fila desde el panel: { columna: valor }, solo con las columnas de la tabla. */
+export const rowValuesSchema = z.object({ values: z.record(z.string(), z.string().max(COLLECTION_LIMITS.cellChars)) });
+export type RowValuesInput = z.infer<typeof rowValuesSchema>;
+
+async function ownTable(id: string) {
+  rejectSystem(id);
+  const { tenantId } = TenantContext.require();
+  const collection = await prisma.collection.findFirst({ where: { id, tenantId } });
+  if (!collection) throw new NotFoundError("Colección no encontrada");
+  return collection;
+}
+
+function valuesForTable(columns: string[], values: Record<string, unknown>): Record<string, string> {
+  const parsed = rowValuesFor(columns, values);
+  if (parsed.unknown.length > 0) throw new ValidationError(`La tabla no tiene las columnas: ${parsed.unknown.join(", ")}`);
+  return parsed.values;
+}
+
+/** Agrega una fila al final y suma una al conteo de la tabla. */
+async function appendRow(collectionId: string, row: Record<string, string>): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const last = await tx.collectionRow.findFirst({
+      where: { collectionId },
+      orderBy: { position: "desc" },
+      select: { position: true },
+    });
+    const created = await tx.collectionRow.create({
+      data: { collectionId, position: (last?.position ?? -1) + 1, data: row, searchText: searchTextOf(row) },
+      select: { id: true },
+    });
+    await tx.collection.update({ where: { id: collectionId }, data: { rowCount: { increment: 1 } } });
+    return created.id;
+  });
+}
+
+/** Una fila nueva desde el panel, con las columnas que ya tiene la tabla. */
+export class AddCollectionRowUseCase {
+  async execute(id: string, input: RowValuesInput): Promise<CollectionRowDto> {
+    authorize("tenant.settings");
+    const collection = await ownTable(id);
+    const columns = collection.columns as string[];
+    const values = valuesForTable(columns, input.values);
+    if (!Object.values(values).some((v) => v.trim())) throw new ValidationError("Llena al menos un dato");
+    if (collection.rowCount >= COLLECTION_LIMITS.rows) {
+      throw new ValidationError(`La tabla llegó al máximo de ${int(COLLECTION_LIMITS.rows)} filas`);
+    }
+    const row = Object.fromEntries(columns.map((c) => [c, values[c] ?? ""]));
+    return { id: await appendRow(collection.id, row), data: row };
+  }
+}
+
+export class UpdateCollectionRowUseCase {
+  async execute(id: string, rowId: string, input: RowValuesInput): Promise<CollectionRowDto> {
+    authorize("tenant.settings");
+    const collection = await ownTable(id);
+    const existing = await prisma.collectionRow.findFirst({ where: { id: rowId, collectionId: collection.id } });
+    if (!existing) throw new NotFoundError("Fila no encontrada");
+    const row = { ...(existing.data as Record<string, string>), ...valuesForTable(collection.columns as string[], input.values) };
+    await prisma.$transaction([
+      prisma.collectionRow.update({ where: { id: rowId }, data: { data: row, searchText: searchTextOf(row) } }),
+      // Para que la tabla muestre que cambió
+      prisma.collection.update({ where: { id: collection.id }, data: { updatedAt: new Date() } }),
+    ]);
+    return { id: rowId, data: row };
+  }
+}
+
+export class DeleteCollectionRowUseCase {
+  async execute(id: string, rowId: string): Promise<void> {
+    authorize("tenant.settings");
+    const collection = await ownTable(id);
+    await prisma.$transaction(async (tx) => {
+      const { count } = await tx.collectionRow.deleteMany({ where: { id: rowId, collectionId: collection.id } });
+      if (count === 0) throw new NotFoundError("Fila no encontrada");
+      await tx.collection.update({ where: { id: collection.id }, data: { rowCount: { decrement: 1 } } });
+    });
+  }
+}
+
+const int = (n: number) => n.toLocaleString("es-CO");
 
 export const collectionMetaSchema = z.object({
   name: z.string().trim().min(2, "Ponle un nombre a la tabla").max(80),
@@ -373,17 +460,7 @@ export async function addCollectionRow(
   if (collection.rowCount >= COLLECTION_LIMITS.rows) return { ok: false, error: "tabla_llena" };
 
   const row = Object.fromEntries(columns.map((c) => [c, parsed.values[c] ?? ""]));
-  await prisma.$transaction(async (tx) => {
-    const last = await tx.collectionRow.findFirst({
-      where: { collectionId: collection.id },
-      orderBy: { position: "desc" },
-      select: { position: true },
-    });
-    await tx.collectionRow.create({
-      data: { collectionId: collection.id, position: (last?.position ?? -1) + 1, data: row, searchText: searchTextOf(row) },
-    });
-    await tx.collection.update({ where: { id: collection.id }, data: { rowCount: { increment: 1 } } });
-  });
+  await appendRow(collection.id, row);
   return { ok: true, table: collection.name, row };
 }
 
@@ -421,7 +498,7 @@ export async function updateCollectionRow(
   await prisma.$transaction([
     prisma.collectionRow.update({ where: { id: matches[0]!.id }, data: { data: row, searchText: searchTextOf(row) } }),
     // Para que la tabla muestre que cambió
-    prisma.collection.update({ where: { id: collection.id }, data: { rowCount: collection.rowCount } }),
+    prisma.collection.update({ where: { id: collection.id }, data: { updatedAt: new Date() } }),
   ]);
   return { ok: true, table: collection.name, row };
 }

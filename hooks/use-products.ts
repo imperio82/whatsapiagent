@@ -19,6 +19,10 @@ export function useProducts(filters: Partial<ListProductsInput> = {}) {
   });
 }
 
+export function useProduct(id: string | null) {
+  return useQuery({ queryKey: [KEY, "one", id], queryFn: () => productsService.get(id!), enabled: !!id });
+}
+
 function showError(err: unknown): void {
   const msg = err instanceof ApiError ? err.message : "Error inesperado";
   toast.error(msg);
@@ -30,6 +34,8 @@ export function useCreateProduct() {
     mutationFn: (input: CreateProductInput) => productsService.create(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
+      // El inventario y los productos también se ven como colección
+      qc.invalidateQueries({ queryKey: ["collections"] });
       toast.success("Producto creado");
     },
     onError: showError,
@@ -43,6 +49,8 @@ export function useUpdateProduct() {
       productsService.update(id, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
+      // El inventario y los productos también se ven como colección
+      qc.invalidateQueries({ queryKey: ["collections"] });
       toast.success("Producto actualizado");
     },
     onError: showError,
@@ -55,6 +63,8 @@ export function useDeleteProduct() {
     mutationFn: (id: string) => productsService.remove(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY] });
+      // El inventario y los productos también se ven como colección
+      qc.invalidateQueries({ queryKey: ["collections"] });
       toast.success("Producto eliminado");
     },
     onError: showError,

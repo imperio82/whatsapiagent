@@ -67,3 +67,29 @@ export function useDeleteCollection() {
     onError: showError,
   });
 }
+
+/** Agregar, editar o borrar una fila de una tabla que subió el negocio. */
+export function useSaveCollectionRow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, rowId, values }: { id: string; rowId?: string; values: Record<string, string> }) =>
+      rowId ? collectionsService.updateRow(id, rowId, values) : collectionsService.addRow(id, values),
+    onSuccess: (_, { rowId }) => {
+      qc.invalidateQueries({ queryKey: [KEY] });
+      toast.success(rowId ? "Fila actualizada" : "Fila agregada");
+    },
+    onError: showError,
+  });
+}
+
+export function useDeleteCollectionRow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, rowId }: { id: string; rowId: string }) => collectionsService.removeRow(id, rowId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [KEY] });
+      toast.success("Fila borrada");
+    },
+    onError: showError,
+  });
+}

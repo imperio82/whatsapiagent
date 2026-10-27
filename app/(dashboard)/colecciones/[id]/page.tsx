@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   LayoutGrid,
+  Pencil,
+  Plus,
   Rows3,
   Search,
   Settings,
@@ -19,12 +20,24 @@ import {
 import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@components/ui/dialog";
 import { Input } from "@components/ui/input";
 import { Label } from "@components/ui/label";
 import { Switch } from "@components/ui/switch";
-import { useCollectionRows, useDeleteCollection, useReplaceCollectionData, useUpdateCollection } from "@hooks/use-collections";
-import type { CollectionDto } from "@modules/collections/application/collections.use-cases";
+import { ListingForm } from "@components/features/listings/listing-form";
+import { announceMatches } from "@components/features/listings/announce-matches";
+import { ProductForm } from "@components/features/products/product-form";
+import {
+  useCollectionRows,
+  useDeleteCollection,
+  useDeleteCollectionRow,
+  useReplaceCollectionData,
+  useSaveCollectionRow,
+  useUpdateCollection,
+} from "@hooks/use-collections";
+import { useCreateListing, useListing, useUpdateListing } from "@hooks/use-listings";
+import { useCreateProduct, useDeleteProduct, useProduct, useUpdateProduct } from "@hooks/use-products";
+import type { CollectionDto, CollectionRowDto } from "@modules/collections/application/collections.use-cases";
 import { cn } from "@lib/utils";
 
 const int = new Intl.NumberFormat("es-CO");
@@ -36,6 +49,10 @@ type View = "filas" | "tarjetas";
 const VIEW_KEY = "collection-view";
 /** Columna que va de título en las tarjetas, si la tabla la tiene */
 const TITLE_COLUMNS = ["titulo", "nombre", "title", "name", "producto", "sede"];
+/** Fila que se está editando: una que ya existe (por su id) o una nueva */
+type Editing = { rowId: string | null } | null;
+
+const ADD_LABEL = { inventario: "Agregar bien", productos: "Nuevo producto" } as const;
 
 function loadView(): View {
   try {
@@ -61,11 +78,14 @@ function titleColumn(columns: string[]): string | undefined {
 
 export default function CollectionPage(): React.ReactElement {
   const { id } = useParams<{ id: string }>();
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
+  // ?q= abre la tabla ya filtrada (por ejemplo, los bienes por aprobar desde el resumen)
+  const initialQuery = useSearchParams().get("q") ?? "";
+  const [query, setQuery] = useState(initialQuery);
+  const [search, setSearch] = useState(initialQuery);
   const [page, setPage] = useState(1);
   const [view, setView] = useState<View>("filas");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editing, setEditing] = useState<Editing>(null);
   const { data, isLoading, error } = useCollectionRows(id, search, page);
 
   useEffect(() => setView(loadView()), []);
@@ -96,6 +116,8 @@ export default function CollectionPage(): React.ReactElement {
     setView(v);
     saveView(v);
   };
+  const edit = (rowId: string) => setEditing({ rowId });
+  const editingRow = editing?.rowId ? data.rows.find((r) => r.id === editing.rowId) : undefined;
 
   return (
     <div className="space-y-4">
@@ -144,6 +166,9 @@ export default function CollectionPage(): React.ReactElement {
           <Button size="icon" variant="outline" className="h-9 w-9" aria-label="Configuración de la tabla" title="Configuración" onClick={() => setSettingsOpen(true)}>
             <Settings className="h-4 w-4" />
           </Button>
+          <Button onClick={() => setEditing({ rowId: null })}>
+            <Plus className="h-4 w-4" /> {collection.system ? ADD_LABEL[collection.system.kind] : "Agregar fila"}
+          </Button>
         </div>
       </div>
 
@@ -154,9 +179,9 @@ export default function CollectionPage(): React.ReactElement {
           </CardContent>
         </Card>
       ) : view === "filas" ? (
-        <RowsView columns={collection.columns} rows={data.rows} offset={(data.page - 1) * data.pageSize} />
+        <RowsView columns={collection.columns} rows={data.rows} offset={(data.page - 1) * data.pageSize} onEdit={edit} />
       ) : (
-        <CardsView columns={collection.columns} rows={data.rows} />
+        <CardsView columns={collection.columns} rows={data.rows} onEdit={edit} />
       )}
 
       {pages > 1 && (
@@ -178,17 +203,41 @@ export default function CollectionPage(): React.ReactElement {
           <DialogHeader>
             <DialogTitle>Configuración de {collection.name}</DialogTitle>
             <DialogDescription>
-              {collection.system ? "Esta tabla se arma sola con tus datos." : "Nombre, acceso del agente y datos de la tabla."}
+              {collection.system ? "Esta tabla se arma con tus datos; cada fila se edita desde aquí." : "Nombre, acceso del agente y datos de la tabla."}
             </DialogDescription>
           </DialogHeader>
           {collection.system ? <SystemSettings collection={collection} /> : <TableSettings collection={collection} />}
         </DialogContent>
       </Dialog>
+
+      {editing && collection.system?.kind === "inventario" && <ListingEditor rowId={editing.rowId} onClose={() => setEditing(null)} />}
+      {editing && collection.system?.kind === "productos" && <ProductEditor rowId={editing.rowId} onClose={() => setEditing(null)} />}
+      {editing && !collection.system && (
+        <RowEditor collection={collection} row={editingRow} onClose={() => setEditing(null)} />
+      )}
     </div>
   );
 }
 
-function RowsView({ columns, rows, offset }: { columns: string[]; rows: Record<string, string>[]; offset: number }) {
+function EditButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Editar" title="Editar" onClick={onClick}>
+      <Pencil className="h-3.5 w-3.5" />
+    </Button>
+  );
+}
+
+function RowsView({
+  columns,
+  rows,
+  offset,
+  onEdit,
+}: {
+  columns: string[];
+  rows: CollectionRowDto[];
+  offset: number;
+  onEdit: (rowId: string) => void;
+}) {
   return (
     <Card>
       <div className="overflow-x-auto">
@@ -201,19 +250,25 @@ function RowsView({ columns, rows, offset }: { columns: string[]; rows: Record<s
                   {c}
                 </th>
               ))}
+              <th className="w-10 px-2 py-2">
+                <span className="sr-only">Editar</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className="border-t border-border align-top">
+              <tr key={row.id} className="cursor-pointer border-t border-border align-top hover:bg-accent/30" onClick={() => onEdit(row.id)}>
                 <td className="px-3 py-2 text-right text-xs text-muted-foreground">{offset + i + 1}</td>
                 {columns.map((c) => (
                   <td key={c} className="max-w-[18rem] px-3 py-2">
-                    <span className="line-clamp-3" title={row[c]}>
-                      {row[c]}
+                    <span className="line-clamp-3" title={row.data[c]}>
+                      {row.data[c]}
                     </span>
                   </td>
                 ))}
+                <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                  <EditButton onClick={() => onEdit(row.id)} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -223,25 +278,28 @@ function RowsView({ columns, rows, offset }: { columns: string[]; rows: Record<s
   );
 }
 
-function CardsView({ columns, rows }: { columns: string[]; rows: Record<string, string>[] }) {
+function CardsView({ columns, rows, onEdit }: { columns: string[]; rows: CollectionRowDto[]; onEdit: (rowId: string) => void }) {
   const title = titleColumn(columns);
   const rest = columns.filter((c) => c !== title);
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {rows.map((row, i) => (
-        <Card key={i}>
+      {rows.map((row) => (
+        <Card key={row.id}>
           <CardContent className="space-y-2 p-4">
-            <div className="font-semibold">{(title && row[title]) || "Sin nombre"}</div>
+            <div className="flex items-start justify-between gap-2">
+              <div className="font-semibold">{(title && row.data[title]) || "Sin nombre"}</div>
+              <EditButton onClick={() => onEdit(row.id)} />
+            </div>
             <dl className="space-y-1 text-sm">
               {rest
-                .filter((c) => row[c])
+                .filter((c) => row.data[c])
                 .map((c) => (
                   <div key={c} className="grid grid-cols-[minmax(0,7rem)_1fr] gap-2">
                     <dt className="truncate text-xs text-muted-foreground" title={c}>
                       {c}
                     </dt>
-                    <dd className="line-clamp-3 min-w-0 break-words" title={row[c]}>
-                      {row[c]}
+                    <dd className="line-clamp-3 min-w-0 break-words" title={row.data[c]}>
+                      {row.data[c]}
                     </dd>
                   </div>
                 ))}
@@ -253,18 +311,184 @@ function CardsView({ columns, rows }: { columns: string[]; rows: Record<string, 
   );
 }
 
-/** Inventario o productos: se editan en su sección y el acceso lo da el permiso de catálogo. */
+/** Una fila de una tabla que subió el negocio: un campo por columna, con la estructura actual de la tabla. */
+function RowEditor({ collection, row, onClose }: { collection: CollectionDto; row?: CollectionRowDto; onClose: () => void }) {
+  const save = useSaveCollectionRow();
+  const remove = useDeleteCollectionRow();
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(collection.columns.map((c) => [c, row?.data[c] ?? ""])),
+  );
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const empty = !Object.values(values).some((v) => v.trim());
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{row ? "Editar fila" : "Agregar fila"}</DialogTitle>
+          <DialogDescription>Con las columnas de {collection.name}. Deja vacío lo que no aplique.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {collection.columns.map((c, i) => {
+            const long = (values[c] ?? "").length > 60;
+            return (
+              <div key={c} className="space-y-1.5">
+                <Label htmlFor={`col-${i}`}>{c}</Label>
+                {long ? (
+                  <textarea
+                    id={`col-${i}`}
+                    rows={3}
+                    className={TEXTAREA}
+                    value={values[c]}
+                    onChange={(e) => setValues({ ...values, [c]: e.target.value })}
+                  />
+                ) : (
+                  <Input id={`col-${i}`} value={values[c]} onChange={(e) => setValues({ ...values, [c]: e.target.value })} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+          {row ? (
+            confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm">¿Borrar la fila?</span>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+                  No
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate({ id: collection.id, rowId: row.id }, { onSuccess: onClose })}
+                >
+                  Sí, borrar
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="h-4 w-4" /> Borrar fila
+              </Button>
+            )
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={empty || save.isPending}
+              onClick={() => save.mutate({ id: collection.id, rowId: row?.id, values }, { onSuccess: onClose })}
+            >
+              {row ? "Guardar" : "Agregar fila"}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Un bien del inventario: el formulario completo (fotos, estado, datos privados del propietario). */
+function ListingEditor({ rowId, onClose }: { rowId: string | null; onClose: () => void }) {
+  const { data: listing, isLoading } = useListing(rowId);
+  const create = useCreateListing();
+  const update = useUpdateListing();
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{rowId ? (listing ? `${listing.code} · ${listing.title}` : "Editar bien") : "Agregar bien"}</DialogTitle>
+          <DialogDescription>
+            La IA solo usa la información pública: nombre, precio, ciudad, barrio, características, descripción y fotos.
+          </DialogDescription>
+        </DialogHeader>
+        {rowId && isLoading ? (
+          <div className="h-48 animate-pulse rounded-md bg-muted/50" />
+        ) : (
+          <ListingForm
+            key={listing?.id ?? "new"}
+            initial={listing}
+            submitting={create.isPending || update.isPending}
+            onCancel={onClose}
+            onSubmit={async (values) => {
+              const saved = listing ? await update.mutateAsync({ id: listing.id, input: values }) : await create.mutateAsync(values);
+              announceMatches(saved);
+              onClose();
+            }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProductEditor({ rowId, onClose }: { rowId: string | null; onClose: () => void }) {
+  const { data: product, isLoading } = useProduct(rowId);
+  const create = useCreateProduct();
+  const update = useUpdateProduct();
+  const remove = useDeleteProduct();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{rowId ? "Editar producto" : "Nuevo producto"}</DialogTitle>
+          <DialogDescription>Si no llevas inventario, desactiva el control de stock.</DialogDescription>
+        </DialogHeader>
+        {rowId && isLoading ? (
+          <div className="h-48 animate-pulse rounded-md bg-muted/50" />
+        ) : (
+          <ProductForm
+            initial={product}
+            submitting={create.isPending || update.isPending}
+            onCancel={onClose}
+            onSubmit={async (values) => {
+              if (product) await update.mutateAsync({ id: product.id, input: values });
+              else await create.mutateAsync(values);
+              onClose();
+            }}
+          />
+        )}
+        {product && (
+          <div className="flex items-center gap-2 border-t border-border pt-3">
+            {confirmDelete ? (
+              <>
+                <span className="text-sm">¿Eliminar el producto?</span>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+                  No
+                </Button>
+                <Button size="sm" variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate(product.id, { onSuccess: onClose })}>
+                  Sí, eliminar
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="h-4 w-4" /> Eliminar producto
+              </Button>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Inventario o productos: se importan desde un archivo y el acceso lo da el permiso de catálogo. */
 function SystemSettings({ collection }: { collection: CollectionDto }) {
   return (
     <div className="space-y-3 text-sm">
       <div className="space-y-2 rounded-md border border-border p-3">
         <p>{collection.description}</p>
         <p className="text-xs text-muted-foreground">
-          Para agregar, editar, importar, subir fotos o borrar, hazlo en {collection.name}; aquí se ve al instante.
+          Para agregar o editar uno por uno, usa el botón de agregar o el lápiz de cada fila. Para cargar muchos de una vez,
+          impórtalos desde Excel o Google Sheets.
         </p>
         <Button asChild size="sm" variant="outline" className="w-full">
-          <Link href={collection.system!.editHref}>
-            <ExternalLink className="h-4 w-4" /> Editar {collection.name.toLowerCase()}
+          <Link href={collection.system!.importHref}>
+            <Upload className="h-4 w-4" /> Importar desde un archivo
           </Link>
         </Button>
       </div>

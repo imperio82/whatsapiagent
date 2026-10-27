@@ -148,6 +148,16 @@ export class UpdateListingUseCase {
   }
 }
 
+export class GetListingUseCase {
+  async execute(id: string): Promise<ListingDto> {
+    authorize("products.read");
+    const { tenantId } = TenantContext.require();
+    const row = await prisma.listing.findFirst({ where: { id, tenantId }, include });
+    if (!row) throw new NotFoundError("Bien no encontrado");
+    return toDto(row);
+  }
+}
+
 /** No se borra: se archiva, para no perder los leads y citas que lo referencian. */
 export class ArchiveListingUseCase {
   async execute(id: string): Promise<void> {

@@ -25,7 +25,15 @@ export class UpdateProductUseCase implements UseCase<UpdateProductCommand, Produ
     if (cmd.priceMajor !== undefined) {
       product.changePrice(Money.fromMajor(cmd.priceMajor, cmd.currency ?? product.toSnapshot().price.currency));
     }
+    product.updateDetails({
+      sku: cmd.sku,
+      description: cmd.description,
+      trackInventory: cmd.trackInventory,
+      stock: cmd.stock,
+      imageUrl: cmd.imageUrl,
+    });
     if (cmd.status === "ARCHIVED") product.archive();
+    if (cmd.status === "ACTIVE") product.activate();
 
     const saved = await this.repo.save(product);
     return toProductDto(saved);
