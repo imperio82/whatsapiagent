@@ -96,6 +96,7 @@ model Tenant {
   greetings       Greeting[]
   reminders       Reminder[]
   billingEntries  BillingEntry[]
+  recharges       Recharge[]
   agentVoice      AgentVoice?
   clonedVoices    ClonedVoice[]
   voiceClips      VoiceClip[]
@@ -128,6 +129,36 @@ model BillingEntry {
 
   @@index([tenantId, createdAt])
   @@map("billing_entries")
+}
+
+/// Recarga de saldo que pide el dueño del negocio: clientes adicionales y saldo de IA para el mes en que se paga.
+/// Queda PENDING hasta que se confirma el pago (hoy a mano en /plataforma; mañana, la pasarela).
+model Recharge {
+  id             String         @id @default(cuid())
+  tenantId       String
+  amountCop      Int
+  clients        Int
+  creditMicroUsd Int
+  status         RechargeStatus @default(PENDING)
+  requestedById  String?
+  /// Quién confirmó o canceló, y una nota (referencia del pago, motivo)
+  resolvedById   String?
+  note           String?
+  createdAt      DateTime       @default(now())
+  paidAt         DateTime?
+  expiresAt      DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([status])
+  @@map("recharges")
+}
+
+enum RechargeStatus {
+  PENDING
+  PAID
+  CANCELLED
 }
 
 enum BillingKind {

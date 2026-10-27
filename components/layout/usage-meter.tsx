@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Wallet } from "lucide-react";
+import { Plus, Wallet } from "lucide-react";
+import { Button } from "@components/ui/button";
+import { RechargeDialog } from "@components/features/billing/recharge-dialog";
 import { useMyUsage } from "@hooks/use-billing";
 import {
   DropdownMenu,
@@ -22,6 +25,7 @@ const int = new Intl.NumberFormat("es-CO");
 /** Presupuesto de IA gastado en el mes, siempre a la vista en el encabezado. */
 export function UsageMeter() {
   const { data } = useMyUsage();
+  const [recharging, setRecharging] = useState(false);
   if (!data) return null;
 
   const ratio = data.budgetUsd > 0 ? data.spentUsd / data.budgetUsd : 1;
@@ -29,54 +33,62 @@ export function UsageMeter() {
   const overdue = data.paidUntil !== null && new Date(data.paidUntil) < new Date();
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-accent"
-          aria-label={`Gastado este mes: ${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`}
-        >
-          <Wallet className={cn("h-4 w-4", ratio >= 1 ? "text-destructive" : "text-muted-foreground")} />
-          <span className="hidden flex-col items-start leading-tight sm:flex">
-            <span className="font-medium tabular-nums">
-              {usd.format(data.spentUsd)} <span className="text-muted-foreground">/ {usd.format(data.budgetUsd)}</span>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors hover:bg-accent"
+            aria-label={`Gastado este mes: ${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`}
+          >
+            <Wallet className={cn("h-4 w-4", ratio >= 1 ? "text-destructive" : "text-muted-foreground")} />
+            <span className="hidden flex-col items-start leading-tight sm:flex">
+              <span className="font-medium tabular-nums">
+                {usd.format(data.spentUsd)} <span className="text-muted-foreground">/ {usd.format(data.budgetUsd)}</span>
+              </span>
+              <span className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                <span className={cn("block h-full rounded-full", tone)} style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
+              </span>
             </span>
-            <span className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-muted">
-              <span className={cn("block h-full rounded-full", tone)} style={{ width: `${Math.min(ratio, 1) * 100}%` }} />
-            </span>
-          </span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel className="font-normal">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Plan {data.planName} · este mes</div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <dl className="space-y-1.5 px-2 py-1.5 text-sm">
-          <Row label="IA gastada" value={`${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`} />
-          {data.creditUsd > 0 && <Row label="Créditos sumados" value={usd.format(data.creditUsd)} />}
-          <Row
-            label="Clientes atendidos"
-            value={`${int.format(data.chats)} de ${int.format(data.chatLimit)}`}
-            warn={data.chats > data.chatLimit}
-          />
-          <Row label="Chats activos (24 h)" value={int.format(data.activeChats)} />
-          {data.paidUntil && (
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuLabel className="font-normal">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Plan {data.planName} · este mes</div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <dl className="space-y-1.5 px-2 py-1.5 text-sm">
+            <Row label="IA gastada" value={`${usd.format(data.spentUsd)} de ${usd.format(data.budgetUsd)}`} />
+            {data.creditUsd > 0 && <Row label="Créditos sumados" value={usd.format(data.creditUsd)} />}
             <Row
-              label={overdue ? "Plan vencido el" : "Pagado hasta"}
-              value={format(new Date(data.paidUntil), "d 'de' MMM yyyy", { locale: es })}
-              warn={overdue}
+              label="Clientes atendidos"
+              value={`${int.format(data.chats)} de ${int.format(data.chatLimit)}`}
+              warn={data.chats > data.chatLimit}
             />
-          )}
-        </dl>
-        <DropdownMenuSeparator />
-        <p className="px-2 py-1.5 text-xs text-muted-foreground">
-          {ratio >= 1
-            ? "Se acabó el presupuesto de IA: el agente dejó de responder y los chats quedan para tu equipo. Escríbenos para recargar."
-            : "Si se acaba el presupuesto, el agente deja de responder y los chats quedan para tu equipo hasta que recargues."}
-        </p>
-      </DropdownMenuContent>
-    </DropdownMenu>
+            <Row label="Chats activos (24 h)" value={int.format(data.activeChats)} />
+            {data.paidUntil && (
+              <Row
+                label={overdue ? "Plan vencido el" : "Pagado hasta"}
+                value={format(new Date(data.paidUntil), "d 'de' MMM yyyy", { locale: es })}
+                warn={overdue}
+              />
+            )}
+          </dl>
+          <DropdownMenuSeparator />
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            {ratio >= 1
+              ? "Llegaste al tope del mes: recarga para que el agente siga atendiendo a los clientes nuevos."
+              : "Si llegas al tope, recarga clientes adicionales o sube de plan para que el agente siga atendiendo."}
+          </p>
+          <div className="px-2 pb-2">
+            <Button size="sm" variant="wa" className="w-full" onClick={() => setRecharging(true)}>
+              <Plus className="h-4 w-4" /> Recargar saldo
+            </Button>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <RechargeDialog open={recharging} onOpenChange={setRecharging} />
+    </>
   );
 }
 

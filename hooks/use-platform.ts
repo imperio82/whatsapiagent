@@ -7,6 +7,7 @@ import { ApiError } from "@services/api-client";
 import type { AddBillingEntryInput, UpdateTenantBillingInput } from "@modules/platform/application/platform.use-cases";
 import type { SetAgentModelInput } from "@modules/platform/application/agent-model.use-cases";
 import type { SetEnforcementInput } from "@modules/platform/application/usage-limits.use-cases";
+import type { ResolveRechargeInput } from "@modules/platform/application/recharges-admin.use-cases";
 
 const KEY = "platform";
 
@@ -86,6 +87,35 @@ export function useSetLimitsEnforcement() {
     onSuccess: (_, input) => {
       qc.invalidateQueries({ queryKey: [KEY, "limits"] });
       toast.success(input.enforcement === "activo" ? "Límites activos: al llegar al tope hay gracia y mensaje de espera" : "Límites en modo solo registro");
+    },
+    onError,
+  });
+}
+
+export function usePlatformRecharges() {
+  return useQuery({ queryKey: [KEY, "recharges"], queryFn: () => platformService.recharges(), refetchInterval: 60_000 });
+}
+
+export function useResolveRecharge() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: ResolveRechargeInput }) => platformService.resolveRecharge(id, input),
+    onSuccess: (data, { input }) => {
+      qc.setQueryData([KEY, "recharges"], data);
+      qc.invalidateQueries({ queryKey: [KEY] });
+      toast.success(input.action === "confirm" ? "Pago confirmado: se sumaron los clientes y el saldo" : "Recarga cancelada");
+    },
+    onError,
+  });
+}
+
+export function useSetPaymentInstructions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (instructions: string) => platformService.setPaymentInstructions(instructions),
+    onSuccess: (data) => {
+      qc.setQueryData([KEY, "recharges"], data);
+      toast.success("Formas de pago guardadas");
     },
     onError,
   });

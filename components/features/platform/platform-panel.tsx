@@ -50,6 +50,7 @@ import type { PlatformTenantDto } from "@modules/platform/application/platform.u
 import { cn } from "@lib/utils";
 import { AgentModelCard } from "./agent-model-card";
 import { UsageLimitsCard } from "./usage-limits-card";
+import { RechargesCard } from "./recharges-card";
 
 const SELECT =
   "flex h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -154,6 +155,8 @@ export function PlatformPanel(): React.ReactElement {
           warn={!!totals && totals.overdue > 0}
         />
       </div>
+
+      <RechargesCard />
 
       <UsageLimitsCard month={month} />
 

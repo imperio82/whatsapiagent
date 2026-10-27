@@ -28,14 +28,22 @@ export async function contactUsage(tenantIds: string[], period: Period): Promise
     GROUP BY l."tenantId", l."conversationId"`;
 }
 
-/** Gasto de IA del mes sin el simulador, y créditos sumados, por negocio. */
+export interface LimitsSpend {
+  spentMicroUsd: number;
+  simulatorMicroUsd: number;
+  creditMicroUsd: number;
+  /** Clientes de recargas pagadas en el mes */
+  extraClients: number;
+}
+
+/** Gasto de IA del mes sin el simulador, créditos sumados y clientes recargados, por negocio. */
 export async function spendForLimits(
   tenantIds: string[],
   period: Period,
-): Promise<Map<string, { spentMicroUsd: number; simulatorMicroUsd: number; creditMicroUsd: number }>> {
-  const result = new Map<string, { spentMicroUsd: number; simulatorMicroUsd: number; creditMicroUsd: number }>();
+): Promise<Map<string, LimitsSpend>> {
+  const result = new Map<string, LimitsSpend>();
   if (tenantIds.length === 0) return result;
-  const [spend, credits] = await Promise.all([
+  const [spend, credits, recharged] = await Promise.all([
     prisma.$queryRaw<{ tenantId: string; spent: bigint | null; simulator: bigint | null }[]>`
       SELECT l."tenantId",
         SUM(CASE WHEN c."waChatId" LIKE ${`%${SIMULATED_DOMAIN}`} THEN 0 ELSE l."costMicroUsd" END) AS spent,
@@ -50,14 +58,22 @@ export async function spendForLimits(
       where: { tenantId: { in: tenantIds }, kind: "CREDIT", createdAt: { gte: period.start, lt: period.end } },
       _sum: { creditMicroUsd: true },
     }),
+    // Su saldo de IA ya entra como crédito (billing_entries); aquí solo los clientes que suman al cupo
+    prisma.recharge.groupBy({
+      by: ["tenantId"],
+      where: { tenantId: { in: tenantIds }, status: "PAID", paidAt: { gte: period.start, lt: period.end } },
+      _sum: { clients: true },
+    }),
   ]);
   const creditBy = new Map(credits.map((c) => [c.tenantId, c._sum.creditMicroUsd ?? 0]));
+  const clientsBy = new Map(recharged.map((r) => [r.tenantId, r._sum.clients ?? 0]));
   for (const id of tenantIds) {
     const row = spend.find((r) => r.tenantId === id);
     result.set(id, {
       spentMicroUsd: Number(row?.spent ?? 0),
       simulatorMicroUsd: Number(row?.simulator ?? 0),
       creditMicroUsd: creditBy.get(id) ?? 0,
+      extraClients: clientsBy.get(id) ?? 0,
     });
   }
   return result;
@@ -66,10 +82,11 @@ export async function spendForLimits(
 export function limitsSnapshot(
   plan: PlanTier,
   clientsServed: number,
-  spend: { spentMicroUsd: number; creditMicroUsd: number },
+  spend: { spentMicroUsd: number; creditMicroUsd: number; extraClients: number },
 ): LimitsSnapshot {
   return {
     plan: PLANS[plan],
+    extraClients: spend.extraClients,
     clientsServed,
     spentMicroUsd: spend.spentMicroUsd,
     budgetMicroUsd: PLANS[plan].aiBudgetUsd * MICRO_USD + spend.creditMicroUsd,

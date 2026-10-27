@@ -60,6 +60,11 @@ Hacerlo **después del punto 1**, cuando la IA ya responda:
   - clientes en espera
   - contactos con 40 o más respuestas
 - El costo descuenta los tokens en caché, que se cobran al 25 % del precio de entrada.
+- **Recarga de saldo por el dueño:** en el contador del encabezado, *Recargar saldo*.
+  - Puede elegir un paquete (100 clientes por $30.000, 250 por $70.000 o 500 por $130.000) o escribir el monto que quiera, entre $20.000 y $2.000.000. El monto libre se calcula al precio del cliente adicional de su plan.
+  - La recarga queda pendiente, con una referencia `REC-XXXXXX` y las formas de pago.
+  - En `/plataforma` → *Recargas de saldo* se confirma el pago. En ese momento se suman los clientes al cupo del mes y el saldo de IA, y el monto cuenta en *Pagos del mes*.
+  - Las formas de pago se editan ahí mismo.
 
 **Falta:**
 - [ ] Revisar 2 a 4 semanas de uso real en modo solo registro y ajustar cupos y precios. Después, pasar a **Activo**.
@@ -68,12 +73,11 @@ Hacerlo **después del punto 1**, cuando la IA ya responda:
   - [ ] aviso diario de los clientes en espera
   - [ ] retomar con un mensaje de disculpa los chats de las últimas 24 h cuando el dueño recarga
 - [ ] Fase 3, cobrar:
-  - [ ] elegir la pasarela de pago
-  - [ ] paquetes de recarga en clientes (100, 250 y 500), con vigencia de 60 días
+  - [ ] elegir la pasarela de pago, para que confirme sola las recargas que hoy se confirman a mano
+  - [ ] que lo recargado y no usado pase al mes siguiente hasta cumplir los 60 días; hoy solo cuenta en el mes en que se paga
   - [ ] auto-recarga, máximo 3 al mes
   - [ ] sugerencia de plan mayor
   - [ ] cambio de plan con prorrateo
-  - Hoy la única recarga es el botón *Crédito*, en dólares.
 - [ ] El cupo se reinicia el 1 de cada mes. El documento pide reiniciarlo el día de corte del plan.
 
 ## 6. Revisar

@@ -7,6 +7,7 @@ const USD = 1_000_000;
 const plan = PLANS.EMPRENDE; // 500 clientes, US$10
 const snap = (clientsServed: number, spentUsd = 0): LimitsSnapshot => ({
   plan,
+  extraClients: 0,
   clientsServed,
   spentMicroUsd: spentUsd * USD,
   budgetMicroUsd: plan.aiBudgetUsd * USD,
@@ -43,5 +44,17 @@ describe("límites de uso", () => {
 
   it("un contacto con 40 respuestas en el mes pasa a un asesor", () => {
     assert.equal(decideResponse(snap(10), { alreadyServed: true, replies: 40, open: true }, null, now).mode, "ESPERA");
+  });
+});
+
+describe("recargas", () => {
+  it("un paquete da sus clientes; un monto libre, al precio del cliente adicional del plan", async () => {
+    const { rechargeQuote } = await import("./plans");
+    assert.equal(rechargeQuote("EMPRENDE", 30_000).clients, 100);
+    assert.equal(rechargeQuote("NEGOCIO", 130_000).clients, 500);
+    // Libre: $45.000 a $300 por cliente en Emprende
+    assert.equal(rechargeQuote("EMPRENDE", 45_000).clients, 150);
+    // Saldo de IA en proporción al tope del plan: US$10 / 500 clientes = US$0,02 por cliente
+    assert.equal(rechargeQuote("EMPRENDE", 30_000).creditUsd, 2);
   });
 });

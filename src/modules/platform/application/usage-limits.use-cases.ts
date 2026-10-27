@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { MICRO_USD, PLANS, USAGE_LIMITS, monthKey, monthPeriod, type PlanTier } from "@modules/billing/domain/plans";
-import { limitLevel, usageShare, type LimitLevel } from "@modules/billing/domain/usage-limits";
+import { clientLimit, limitLevel, usageShare, type LimitLevel } from "@modules/billing/domain/usage-limits";
 import { contactUsage, limitsSnapshot, spendForLimits } from "@modules/billing/application/response-gate";
 import {
   limitsEnforcement,
@@ -82,7 +82,7 @@ export class GetUsageLimitsUseCase {
         plan: t.plan,
         status: t.status,
         clientsServed: own.length,
-        chatLimit: PLANS[t.plan].chats,
+        chatLimit: clientLimit(snapshot),
         spentUsd,
         budgetUsd: snapshot.budgetMicroUsd / MICRO_USD,
         share: usageShare(snapshot),

@@ -22,6 +22,14 @@ import {
   setEnforcementSchema,
   type UsageLimitsDto,
 } from "../application/usage-limits.use-cases";
+import {
+  ListPlatformRechargesUseCase,
+  ResolveRechargeUseCase,
+  SetPaymentInstructionsUseCase,
+  paymentInstructionsSchema,
+  resolveRechargeSchema,
+  type PlatformRechargesDto,
+} from "../application/recharges-admin.use-cases";
 
 export class PlatformController {
   private readonly overviewUC = new GetPlatformOverviewUseCase();
@@ -33,6 +41,9 @@ export class PlatformController {
   private readonly setModelUC = new SetAgentModelUseCase();
   private readonly limitsUC = new GetUsageLimitsUseCase();
   private readonly enforcementUC = new SetLimitsEnforcementUseCase();
+  private readonly rechargesUC = new ListPlatformRechargesUseCase();
+  private readonly resolveRechargeUC = new ResolveRechargeUseCase();
+  private readonly instructionsUC = new SetPaymentInstructionsUseCase();
 
   overview(month: string | null): Promise<PlatformOverviewDto> {
     return this.overviewUC.execute(month);
@@ -70,5 +81,19 @@ export class PlatformController {
   async setEnforcement(body: unknown): Promise<UsageLimitsDto> {
     await this.enforcementUC.execute(setEnforcementSchema.parse(body));
     return this.limitsUC.execute(null);
+  }
+
+  recharges(): Promise<PlatformRechargesDto> {
+    return this.rechargesUC.execute();
+  }
+
+  async resolveRecharge(id: string, ownerUserId: string, body: unknown): Promise<PlatformRechargesDto> {
+    await this.resolveRechargeUC.execute(id, ownerUserId, resolveRechargeSchema.parse(body));
+    return this.rechargesUC.execute();
+  }
+
+  async setPaymentInstructions(body: unknown): Promise<PlatformRechargesDto> {
+    await this.instructionsUC.execute(paymentInstructionsSchema.parse(body));
+    return this.rechargesUC.execute();
   }
 }

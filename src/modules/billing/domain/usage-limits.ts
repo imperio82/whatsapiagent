@@ -13,6 +13,8 @@ export type LimitLevel = "NORMAL" | "AVISO_70" | "AVISO_90" | "TOPE";
 
 export interface LimitsSnapshot {
   plan: Plan;
+  /** Clientes de recargas pagadas este mes, que se suman al cupo del plan */
+  extraClients: number;
   /** Contactos distintos que recibieron al menos una respuesta de IA en el mes */
   clientsServed: number;
   spentMicroUsd: number;
@@ -34,9 +36,15 @@ export interface ResponseDecision {
   reason: string;
 }
 
+/** Cupo de clientes del mes: el del plan más lo recargado. */
+export function clientLimit(s: LimitsSnapshot): number {
+  return s.plan.chats + s.extraClients;
+}
+
 /** La proporción más alta entre clientes del cupo y gasto del tope: lo que se acabe primero manda. */
 export function usageShare(s: LimitsSnapshot): number {
-  const clients = s.plan.chats > 0 ? s.clientsServed / s.plan.chats : 0;
+  const limit = clientLimit(s);
+  const clients = limit > 0 ? s.clientsServed / limit : 0;
   const budget = s.budgetMicroUsd > 0 ? s.spentMicroUsd / s.budgetMicroUsd : 0;
   return Math.max(clients, budget);
 }
@@ -52,7 +60,7 @@ export function limitLevel(s: LimitsSnapshot): LimitLevel {
 
 /** El negocio ya no puede sumar clientes nuevos (cupo lleno) o ya gastó el tope de IA. */
 export function capReached(s: LimitsSnapshot): boolean {
-  return s.clientsServed >= s.plan.chats || s.spentMicroUsd >= s.budgetMicroUsd;
+  return s.clientsServed >= clientLimit(s) || s.spentMicroUsd >= s.budgetMicroUsd;
 }
 
 /**
@@ -71,7 +79,7 @@ export function decideResponse(
 
   const budgetDone = s.spentMicroUsd >= s.budgetMicroUsd;
   // Con el cupo lleno, un contacto que ya se atendió este mes no suma: solo frena a los nuevos
-  const clientsDone = s.clientsServed >= s.plan.chats && !contact.alreadyServed;
+  const clientsDone = s.clientsServed >= clientLimit(s) && !contact.alreadyServed;
   if (!budgetDone && !clientsDone) return { mode: "IA", reason: "dentro del cupo" };
 
   const why = budgetDone ? "gastó el tope de IA del mes" : "llenó el cupo de clientes del mes";

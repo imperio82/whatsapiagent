@@ -111,6 +111,32 @@ export const RECHARGE_PACKS = [
   { clients: 500, priceCop: 130_000 },
 ] as const;
 
+/** Monto libre de recarga: mínimo y máximo en pesos */
+export const RECHARGE_MIN_COP = 20_000;
+export const RECHARGE_MAX_COP = 2_000_000;
+/** Días que dura lo recargado */
+export const RECHARGE_VALID_DAYS = 60;
+
+export interface RechargeQuote {
+  amountCop: number;
+  /** Clientes adicionales que suma al cupo */
+  clients: number;
+  /** Saldo de IA que suma al tope, en proporción a lo que el plan da por cliente */
+  creditUsd: number;
+}
+
+/**
+ * Lo que da una recarga: con el monto de un paquete, los clientes del paquete; con un monto libre, al precio
+ * del cliente adicional del plan. El saldo de IA crece en la misma proporción que el tope del plan por cliente.
+ */
+export function rechargeQuote(tier: PlanTier, amountCop: number): RechargeQuote {
+  const plan = PLANS[tier];
+  const pack = RECHARGE_PACKS.find((p) => p.priceCop === amountCop);
+  const clients = pack ? pack.clients : Math.floor(amountCop / plan.extraChatCop);
+  const creditUsd = Math.round(((clients * plan.aiBudgetUsd) / plan.chats) * 100) / 100;
+  return { amountCop, clients, creditUsd };
+}
+
 /** Precio por cliente adicional más bajo (el del plan más grande), para textos de "desde" */
 export const EXTRA_CHAT_COP = Math.min(...Object.values(PLANS).map((p) => p.extraChatCop));
 export const TRIAL_DAYS = 14;
