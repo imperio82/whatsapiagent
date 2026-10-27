@@ -48,6 +48,7 @@ import {
 } from "@modules/billing/domain/plans";
 import type { PlatformTenantDto } from "@modules/platform/application/platform.use-cases";
 import { cn } from "@lib/utils";
+import { AgentModelCard } from "./agent-model-card";
 
 const SELECT =
   "flex h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -148,6 +149,8 @@ export function PlatformPanel(): React.ReactElement {
           warn={!!totals && totals.overdue > 0}
         />
       </div>
+
+      <AgentModelCard />
 
       <Card>
         <div className="flex items-center gap-3 border-b border-border p-3">

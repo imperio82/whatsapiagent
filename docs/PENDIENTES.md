@@ -6,6 +6,7 @@ Lo que quedó por hacer al 26 de octubre de 2026. Rama de trabajo: `feat/perfil-
 
 - [ ] **Recargar los créditos de Gemini.** Google responde `402 Your prepayment credits are depleted`. Agregar el método de pago no basta: también hay que **comprar créditos** (o pasar a facturación pospago) en Google AI Studio → *Billing*, en el mismo proyecto de la clave `GEMINI_API_KEY`.
 - [ ] Revisar que la clave de Railway sea la del proyecto que tiene saldo (la clave local termina en `…XFnU`).
+- [ ] Elegir el modelo en `/plataforma` → *Modelo del agente*. Recomendado: `gemini-2.5-flash-lite`, que tiene versión fija y es el más barato. Al guardar se hace una prueba; si no hay saldo, no se cambia.
 - [ ] Probarlo en el simulador (*Configuración → Simulador*). Debe responder en pocos segundos, sin el aviso "El agente no respondió".
 
 ## 2. Unir a `main` lo que está en la rama sin desplegar
@@ -26,7 +27,7 @@ Hacerlo **después del punto 1**, cuando la IA ya responda:
   ```
   npx prisma migrate deploy
   ```
-  Las migraciones son `20261025100000_ai_reply_delay`, `20261025200000_agent_personality`, `20261025300000_reminders` y `20261026000000_agent_permissions`.
+  Las migraciones son `20261025100000_ai_reply_delay`, `20261025200000_agent_personality`, `20261025300000_reminders`, `20261026000000_agent_permissions`, `20261026100000_visit_confirmation_skill` y `20261026200000_platform_settings`.
 
 ## 4. Dominio y nombre de la marca
 

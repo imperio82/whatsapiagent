@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { platformService } from "@services/platform.service";
 import { ApiError } from "@services/api-client";
 import type { AddBillingEntryInput, UpdateTenantBillingInput } from "@modules/platform/application/platform.use-cases";
+import type { SetAgentModelInput } from "@modules/platform/application/agent-model.use-cases";
 
 const KEY = "platform";
 
@@ -52,6 +53,22 @@ export function useAddBillingEntry() {
       qc.invalidateQueries({ queryKey: [KEY] });
       qc.invalidateQueries({ queryKey: ["billing"] });
       toast.success(input.kind === "PAYMENT" ? "Pago registrado" : "Crédito agregado");
+    },
+    onError,
+  });
+}
+
+export function useAgentModel() {
+  return useQuery({ queryKey: [KEY, "agent-model"], queryFn: () => platformService.agentModel() });
+}
+
+export function useSetAgentModel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SetAgentModelInput) => platformService.setAgentModel(input),
+    onSuccess: (data) => {
+      qc.setQueryData([KEY, "agent-model"], data);
+      toast.success(`El agente ahora responde con ${data.current.modelName}`);
     },
     onError,
   });

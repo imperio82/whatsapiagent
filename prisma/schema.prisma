@@ -535,6 +535,15 @@ model AiUsageLog {
   @@map("ai_usage_logs")
 }
 
+/// Ajustes de toda la plataforma que su dueño cambia desde /plataforma (por ejemplo, el modelo del agente)
+model PlatformSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
 enum MessageDirection {
   INBOUND
   OUTBOUND

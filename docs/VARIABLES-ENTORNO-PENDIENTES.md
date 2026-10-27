@@ -78,7 +78,8 @@ ALLOW_PRIVATE_DATA_SOURCES=false
 
 ### Agente: `GEMINI_GRAPH_MODEL`, `AI_ENGINE` y `AI_REPLY_DELAY_MS`
 - `GEMINI_GRAPH_MODEL`: el modelo que usa el agente multiagente (router, especialistas y verificador). Por defecto es
-  `gemini-flash-lite-latest`, que es rápido y barato.
+  `gemini-flash-lite-latest`, que es rápido y barato. **Si se elige un modelo en `/plataforma` → *Modelo del agente*,
+  manda ese** y esta variable (u `OPENAI_MODEL` con `AI_PROVIDER="openai"`) solo se usa si no hay ninguno elegido ahí.
 - `AI_ENGINE`: con `graph` (por defecto) responden varios especialistas y un verificador. Con `simple` responde un solo
   agente, más barato pero menos preciso.
 - `AI_REPLY_DELAY_MS`: los milisegundos que el agente espera sin mensajes nuevos antes de responder (por defecto `6000`).

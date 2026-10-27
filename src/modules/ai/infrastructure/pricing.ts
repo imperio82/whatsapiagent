@@ -9,7 +9,7 @@
  * para guardarlo sin perder precisión y evitar floats en la DB.
  */
 
-interface ModelPrice {
+export interface ModelPrice {
   /** USD por 1M de tokens de entrada. */
   inPerMillion: number;
   /** USD por 1M de tokens de salida. */
@@ -23,6 +23,9 @@ const PRICES: Array<[prefix: string, price: ModelPrice]> = [
   ["gpt-4o", { inPerMillion: 2.5, outPerMillion: 10 }],
   ["gpt-4.1-mini", { inPerMillion: 0.4, outPerMillion: 1.6 }],
   ["gpt-4.1", { inPerMillion: 2, outPerMillion: 8 }],
+  ["gpt-5-nano", { inPerMillion: 0.05, outPerMillion: 0.4 }],
+  ["gpt-5-mini", { inPerMillion: 0.25, outPerMillion: 2 }],
+  ["gemini-3.1-flash-lite", { inPerMillion: 0.25, outPerMillion: 1.5 }],
   ["gemini-2.5-flash-lite", { inPerMillion: 0.1, outPerMillion: 0.4 }],
   ["gemini-2.5-flash", { inPerMillion: 0.3, outPerMillion: 2.5 }],
   ["gemini-flash-lite", { inPerMillion: 0.1, outPerMillion: 0.4 }],
@@ -34,7 +37,7 @@ const PRICES: Array<[prefix: string, price: ModelPrice]> = [
 
 const FALLBACK: ModelPrice = { inPerMillion: 0.15, outPerMillion: 0.6 };
 
-function priceFor(model: string): ModelPrice {
+export function priceFor(model: string): ModelPrice {
   const m = model.toLowerCase();
   for (const [prefix, price] of PRICES) {
     if (m.startsWith(prefix)) return price;

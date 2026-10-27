@@ -13,6 +13,7 @@ import { verifyReply } from "../../domain/reply-verifier";
 import { COMMON_RULES } from "../system-prompt";
 import { decideVoiceReply, type VoiceDecision, type VoicePolicy } from "@modules/voice/domain/voice-policy";
 import { createChatModel } from "./chat-model";
+import { resolveAgentModel } from "../agent-model-setting";
 import { normalizeToolArgs, toLangChainTools, toolFields } from "./lc-tools";
 import { GRAPH_PROFILES, type GraphProfile } from "./profiles";
 
@@ -178,7 +179,7 @@ export async function runSalesGraph(input: {
   const profile = input.profile ?? GRAPH_PROFILES.RETAIL;
   const voiceRules =
     !!input.voice?.policy.enabled && input.voice.policy.mode === "RULES" && input.voice.policy.rules.length > 0;
-  const { model, modelName, provider } = createChatModel();
+  const { model, modelName, provider } = createChatModel(await resolveAgentModel());
   const lcTools = toLangChainTools(input.tools);
   // Las aclaraciones del perfil van al final, después de las reglas del negocio, para que pesen más
   const routerPrompt = [
