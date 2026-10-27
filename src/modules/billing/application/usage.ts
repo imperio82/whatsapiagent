@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { SIMULATED_DOMAIN } from "@shared/domain/wa-jid";
 import { MICRO_USD, limitsPlan, monthPeriod, type Period, type PlanTier } from "../domain/plans";
-import { isTrial, trialTenantIds } from "./trial";
+import { currentTrialLimits, trialLimitsFor, trialTenantIds } from "./trial";
 
 /** Consumo de un negocio en un mes. Los montos van en millonésimas de dólar, como en ai_usage_logs. */
 export interface TenantUsage {
@@ -91,6 +91,7 @@ export async function usageByTenant(
     }),
     trialTenantIds(ids),
   ]);
+  const trialLimits = trial.size > 0 ? await currentTrialLimits() : null;
 
   const aiBy = new Map(ai.map((r) => [r.tenantId, r]));
   const voiceOf = (tenantId: string, intent: string) => voice.find((r) => r.tenantId === tenantId && r.intent === intent);
@@ -119,7 +120,7 @@ export async function usageByTenant(
       outboundMessages: outboundBy.get(t.id) ?? 0,
       spentMicroUsd: a?._sum.costMicroUsd ?? 0,
       creditMicroUsd,
-      budgetMicroUsd: limitsPlan(t.plan, trial.has(t.id)).aiBudgetUsd * MICRO_USD + creditMicroUsd,
+      budgetMicroUsd: limitsPlan(t.plan, trial.has(t.id) ? trialLimits : null).aiBudgetUsd * MICRO_USD + creditMicroUsd,
     });
   }
   return result;
@@ -145,7 +146,7 @@ export async function aiBudgetExhausted(tenant: TenantPlanRow, now = new Date())
       where: { tenantId: tenant.id, kind: "CREDIT", createdAt: { gte: start } },
       _sum: { creditMicroUsd: true },
     }),
-    isTrial(tenant.id),
+    trialLimitsFor(tenant.id),
   ]);
   const budget = limitsPlan(tenant.plan, trial).aiBudgetUsd * MICRO_USD + (credits._sum.creditMicroUsd ?? 0);
   return (spent._sum.costMicroUsd ?? 0) >= budget;

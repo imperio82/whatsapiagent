@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { SIMULATED_DOMAIN } from "@shared/domain/wa-jid";
-import { MICRO_USD, USAGE_LIMITS, limitsPlan, monthKey, monthPeriod, type Period, type PlanTier } from "../domain/plans";
-import { isTrial } from "./trial";
+import { MICRO_USD, USAGE_LIMITS, limitsPlan, monthKey, monthPeriod, type Period, type PlanTier, type TrialLimits } from "../domain/plans";
+import { trialLimitsFor } from "./trial";
 import { capReached, decideResponse, type LimitsSnapshot, type ResponseDecision } from "../domain/usage-limits";
 
 export interface ContactUsageRow {
@@ -84,7 +84,7 @@ export function limitsSnapshot(
   tier: PlanTier,
   clientsServed: number,
   spend: { spentMicroUsd: number; creditMicroUsd: number; extraClients: number },
-  trial = false,
+  trial: TrialLimits | null = null,
 ): LimitsSnapshot {
   const plan = limitsPlan(tier, trial);
   return {
@@ -111,7 +111,7 @@ export async function canRespond(
     contactUsage([tenant.id], period),
     spendForLimits([tenant.id], period),
     prisma.usageMonth.findUnique({ where: { tenantId_month: { tenantId: tenant.id, month } } }),
-    isTrial(tenant.id),
+    trialLimitsFor(tenant.id),
   ]);
   const snapshot = limitsSnapshot(tenant.plan, contacts.length, spend.get(tenant.id)!, trial);
   const row = contacts.find((c) => c.conversationId === conversationId);

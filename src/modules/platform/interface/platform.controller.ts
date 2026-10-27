@@ -23,6 +23,12 @@ import {
   type VoiceModelDto,
 } from "../application/voice-model.use-cases";
 import {
+  GetTrialSettingsUseCase,
+  SetTrialSettingsUseCase,
+  setTrialSchema,
+  type TrialSettingsDto,
+} from "../application/trial.use-cases";
+import {
   GetUsageLimitsUseCase,
   SetLimitsEnforcementUseCase,
   setEnforcementSchema,
@@ -47,6 +53,8 @@ export class PlatformController {
   private readonly setModelUC = new SetAgentModelUseCase();
   private readonly getVoiceModelUC = new GetVoiceModelUseCase();
   private readonly setVoiceModelUC = new SetVoiceModelUseCase();
+  private readonly getTrialUC = new GetTrialSettingsUseCase();
+  private readonly setTrialUC = new SetTrialSettingsUseCase();
   private readonly limitsUC = new GetUsageLimitsUseCase();
   private readonly enforcementUC = new SetLimitsEnforcementUseCase();
   private readonly rechargesUC = new ListPlatformRechargesUseCase();
@@ -80,6 +88,15 @@ export class PlatformController {
   async setAgentModel(body: unknown): Promise<AgentModelDto> {
     await this.setModelUC.execute(setAgentModelSchema.parse(body));
     return this.getModelUC.execute();
+  }
+
+  trial(): Promise<TrialSettingsDto> {
+    return this.getTrialUC.execute();
+  }
+
+  async setTrial(body: unknown): Promise<TrialSettingsDto> {
+    await this.setTrialUC.execute(setTrialSchema.parse(body));
+    return this.getTrialUC.execute();
   }
 
   voiceModel(): Promise<VoiceModelDto> {

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { PLANS, TRIAL, limitsPlan } from "./plans";
+import { PLANS, limitsPlan, trialLimits } from "./plans";
 import { capReached, decideResponse, limitLevel, type ContactSnapshot, type LimitsSnapshot } from "./usage-limits";
 
 const USD = 1_000_000;
@@ -58,12 +58,14 @@ describe("recargas", () => {
     assert.equal(rechargeQuote("EMPRENDE", 30_000).creditUsd, 2);
   });
 
-  it("la prueba gratis vale US$ 5 a precio de venta, no a costo", () => {
-    const trial = limitsPlan("PRO", true);
-    assert.equal(trial.aiBudgetUsd, 1.5);
-    assert.equal(trial.chats, TRIAL.chats);
+  it("la prueba gratis se mide a precio de venta, no a costo", () => {
+    const limits = trialLimits(3, 3_900);
+    assert.equal(limits.aiBudgetUsd, 0.9);
+    assert.equal(limits.chats, 45);
+    const trial = limitsPlan("PRO", limits);
+    assert.equal(trial.chats, 45);
     // Lo que se recarga se sigue cobrando al precio del plan elegido
     assert.equal(trial.extraChatCop, PLANS.PRO.extraChatCop);
-    assert.equal(limitsPlan("PRO", false), PLANS.PRO);
+    assert.equal(limitsPlan("PRO", null), PLANS.PRO);
   });
 });
