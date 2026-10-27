@@ -4,12 +4,11 @@ import { failure, type ApiFailure } from "@shared/interface/http/response";
 import type { NextResponse } from "next/server";
 
 /**
- * La plataforma (planes, cobros y costos de todos los negocios) es solo para su dueño. Hacen falta las dos
- * cosas: la marca de administrador en la base de datos y que el correo esté en PLATFORM_ADMIN_EMAILS.
- * Sin esa variable no entra nadie.
+ * La plataforma (planes, cobros y costos de todos los negocios) es solo para su dueño: los correos de
+ * PLATFORM_ADMIN_EMAILS, que solo se cambian en el servidor. Sin esa variable no entra nadie.
  */
-export function isPlatformOwner(user: { email?: string | null; isPlatformAdmin?: boolean } | undefined): boolean {
-  if (!user?.isPlatformAdmin || !user.email) return false;
+export function isPlatformOwner(user: { email?: string | null } | undefined): boolean {
+  if (!user?.email) return false;
   const allowed = (process.env.PLATFORM_ADMIN_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())

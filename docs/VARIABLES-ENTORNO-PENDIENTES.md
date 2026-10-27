@@ -111,5 +111,5 @@ ALLOW_PRIVATE_DATA_SOURCES=false
 Además de lo anterior, revisa que en producción estén:
 - `AUTH_URL` y `NEXT_PUBLIC_APP_URL` con el dominio real (no `localhost`).
 - `NODE_ENV="production"`.
-- `PLATFORM_ADMIN_EMAILS` con tu correo, para entrar a `/plataforma`.
+- `PLATFORM_ADMIN_EMAILS` con tu correo, para entrar a `/plataforma`. Con ese correo aparece el botón *Admin* arriba a la derecha.
 - `TWILIO_VALIDATE_SIGNATURE="true"` si algún día usas Twilio.

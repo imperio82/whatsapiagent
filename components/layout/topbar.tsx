@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { Bell, CircleHelp, LogOut, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, User } from "lucide-react";
+import { Bell, CircleHelp, LogOut, Moon, PanelLeftClose, PanelLeftOpen, Search, ShieldCheck, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useHandoffQueue } from "@hooks/use-conversations";
 import { Avatar, AvatarFallback } from "@components/ui/avatar";
@@ -23,9 +23,11 @@ import {
 interface TopbarProps {
   userName: string;
   userEmail: string;
+  /** Su correo está en PLATFORM_ADMIN_EMAILS: ve el acceso a /plataforma */
+  platformOwner?: boolean;
 }
 
-export function Topbar({ userName, userEmail }: TopbarProps) {
+export function Topbar({ userName, userEmail, platformOwner = false }: TopbarProps) {
   const { theme, setTheme } = useTheme();
   const { data: handoffs } = useHandoffQueue();
   const pending = handoffs?.length ?? 0;
@@ -58,6 +60,13 @@ export function Topbar({ userName, userEmail }: TopbarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        {platformOwner && (
+          <Button asChild variant="outline" size="sm" title="Clientes, cobros, costos y modelo del agente">
+            <Link href="/plataforma">
+              <ShieldCheck className="h-4 w-4" /> <span className="hidden sm:inline">Admin</span>
+            </Link>
+          </Button>
+        )}
         <UsageMeter />
         <WhatsAppStatus />
         <Button variant="ghost" size="sm" onClick={openQuickStart} title="Guía de inicio rápido">
@@ -110,6 +119,13 @@ export function Topbar({ userName, userEmail }: TopbarProps) {
             <DropdownMenuItem>
               <User className="mr-2 h-4 w-4" /> Mi cuenta
             </DropdownMenuItem>
+            {platformOwner && (
+              <DropdownMenuItem asChild>
+                <Link href="/plataforma">
+                  <ShieldCheck className="mr-2 h-4 w-4" /> Admin de la plataforma
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
               <LogOut className="mr-2 h-4 w-4" /> Cerrar sesión
