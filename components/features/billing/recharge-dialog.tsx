@@ -61,8 +61,7 @@ export function RechargeDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         <DialogHeader>
           <DialogTitle>Recargar saldo</DialogTitle>
           <DialogDescription>
-            Suma clientes atendidos y saldo de IA a tu plan {data?.planName} este mes. Lo recargado dura{" "}
-            {data?.validDays ?? 60} días.
+            Suma saldo para que tu agente siga atendiendo a tus clientes. Lo recargado dura {data?.validDays ?? 60} días.
           </DialogDescription>
         </DialogHeader>
 
@@ -74,8 +73,9 @@ export function RechargeDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-wa" />
               <div>
                 <div className="font-medium">
-                  Recarga {done.reference} por {cop.format(done.amountCop)}: {int.format(done.clients)} clientes
+                  Recarga {done.reference} por {cop.format(done.amountCop)}
                 </div>
+                <div className="text-muted-foreground">Alcanza para atender unos {int.format(done.clients)} clientes más.</div>
                 <div className="text-muted-foreground">Queda pendiente hasta que confirmemos el pago.</div>
               </div>
             </div>
@@ -100,9 +100,8 @@ export function RechargeDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     choice === p.amountCop ? "border-wa ring-1 ring-wa" : "border-border",
                   )}
                 >
-                  <div className="text-base font-semibold">{int.format(p.clients)} clientes</div>
-                  <div className="text-sm">{cop.format(p.amountCop)}</div>
-                  <div className="text-[11px] text-muted-foreground">{cop.format(p.amountCop / p.clients)} por cliente</div>
+                  <div className="text-base font-semibold">{cop.format(p.amountCop)}</div>
+                  <div className="text-[11px] text-muted-foreground">Para atender unos {int.format(p.clients)} clientes</div>
                 </button>
               ))}
             </div>
@@ -126,15 +125,14 @@ export function RechargeDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 }}
               />
               <p className="text-[11px] text-muted-foreground">
-                A {cop.format(data.extraChatCop)} por cliente adicional en tu plan. Entre {cop.format(data.minCop)} y{" "}
-                {cop.format(data.maxCop)}.
+                Entre {cop.format(data.minCop)} y {cop.format(data.maxCop)}.
               </p>
             </div>
 
             {amountCop > 0 && (
               <p className={cn("text-sm", valid ? "text-foreground" : "text-destructive")}>
                 {valid
-                  ? `Recargas ${cop.format(amountCop)} y sumas ${int.format(clients)} clientes a tu cupo.`
+                  ? `Recargas ${cop.format(amountCop)}: alcanza para atender unos ${int.format(clients)} clientes más.`
                   : amountCop < data.minCop
                     ? `El mínimo es ${cop.format(data.minCop)}.`
                     : `El máximo es ${cop.format(data.maxCop)}.`}
@@ -148,8 +146,7 @@ export function RechargeDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   {data.recharges.map((r) => (
                     <li key={r.id} className="flex items-center justify-between gap-2 py-1.5">
                       <span>
-                        <span className="font-mono">{r.reference}</span> · {cop.format(r.amountCop)} ·{" "}
-                        {int.format(r.clients)} clientes
+                        <span className="font-mono">{r.reference}</span> · {cop.format(r.amountCop)}
                         <span className="text-muted-foreground"> · {format(new Date(r.createdAt), "d MMM", { locale: es })}</span>
                       </span>
                       <Badge variant={STATUS[r.status].variant}>{STATUS[r.status].label}</Badge>

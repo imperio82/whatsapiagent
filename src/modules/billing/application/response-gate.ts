@@ -1,7 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { SIMULATED_DOMAIN } from "@shared/domain/wa-jid";
-import { MICRO_USD, PLANS, USAGE_LIMITS, monthKey, monthPeriod, type Period, type PlanTier } from "../domain/plans";
+import { MICRO_USD, USAGE_LIMITS, limitsPlan, monthKey, monthPeriod, type Period, type PlanTier } from "../domain/plans";
+import { isTrial } from "./trial";
 import { capReached, decideResponse, type LimitsSnapshot, type ResponseDecision } from "../domain/usage-limits";
 
 export interface ContactUsageRow {
@@ -80,16 +81,18 @@ export async function spendForLimits(
 }
 
 export function limitsSnapshot(
-  plan: PlanTier,
+  tier: PlanTier,
   clientsServed: number,
   spend: { spentMicroUsd: number; creditMicroUsd: number; extraClients: number },
+  trial = false,
 ): LimitsSnapshot {
+  const plan = limitsPlan(tier, trial);
   return {
-    plan: PLANS[plan],
+    plan,
     extraClients: spend.extraClients,
     clientsServed,
     spentMicroUsd: spend.spentMicroUsd,
-    budgetMicroUsd: PLANS[plan].aiBudgetUsd * MICRO_USD + spend.creditMicroUsd,
+    budgetMicroUsd: plan.aiBudgetUsd * MICRO_USD + spend.creditMicroUsd,
   };
 }
 
@@ -104,12 +107,13 @@ export async function canRespond(
 ): Promise<ResponseDecision> {
   const period = monthPeriod(null, now);
   const month = monthKey(now);
-  const [contacts, spend, usageMonth] = await Promise.all([
+  const [contacts, spend, usageMonth, trial] = await Promise.all([
     contactUsage([tenant.id], period),
     spendForLimits([tenant.id], period),
     prisma.usageMonth.findUnique({ where: { tenantId_month: { tenantId: tenant.id, month } } }),
+    isTrial(tenant.id),
   ]);
-  const snapshot = limitsSnapshot(tenant.plan, contacts.length, spend.get(tenant.id)!);
+  const snapshot = limitsSnapshot(tenant.plan, contacts.length, spend.get(tenant.id)!, trial);
   const row = contacts.find((c) => c.conversationId === conversationId);
   const contact = {
     alreadyServed: !!row,

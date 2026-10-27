@@ -141,6 +141,23 @@ export function rechargeQuote(tier: PlanTier, amountCop: number): RechargeQuote 
 export const EXTRA_CHAT_COP = Math.min(...Object.values(PLANS).map((p) => p.extraChatCop));
 export const TRIAL_DAYS = 14;
 
+/**
+ * Prueba gratis: vale US$ 5 a precio de venta, no a costo. Con la IA en el 30 % del precio
+ * (USAGE_LIMITS.aiShareTarget), el tope de gasto real es US$ 1,50, y el cupo es lo que dan US$ 5
+ * (~$19.500) al precio por cliente de Emprende ($129.000 / 500 = $258): unos 75 clientes.
+ */
+export const TRIAL = {
+  valueUsd: 5,
+  aiBudgetUsd: 5 * USAGE_LIMITS.aiShareTarget,
+  chats: 75,
+} as const;
+
+/** Los límites con los que se mide el negocio: los de su plan o, si está en prueba, los de la prueba. */
+export function limitsPlan(tier: PlanTier, trial: boolean): Plan {
+  const plan = PLANS[tier];
+  return trial ? { ...plan, name: "Prueba gratis", chats: TRIAL.chats, aiBudgetUsd: TRIAL.aiBudgetUsd } : plan;
+}
+
 export const MICRO_USD = 1_000_000;
 
 /**

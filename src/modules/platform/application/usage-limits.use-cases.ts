@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { trialTenantIds } from "@modules/billing/application/trial";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { MICRO_USD, PLANS, USAGE_LIMITS, monthKey, monthPeriod, type PlanTier } from "@modules/billing/domain/plans";
 import { clientLimit, limitLevel, usageShare, type LimitLevel } from "@modules/billing/domain/usage-limits";
@@ -62,18 +63,19 @@ export class GetUsageLimitsUseCase {
       select: { id: true, name: true, plan: true, status: true },
     });
     const ids = tenants.map((t) => t.id);
-    const [contacts, spend, months, enforcement] = await Promise.all([
+    const [contacts, spend, months, enforcement, trial] = await Promise.all([
       contactUsage(ids, period),
       spendForLimits(ids, period),
       prisma.usageMonth.findMany({ where: { tenantId: { in: ids }, month: key } }),
       limitsEnforcement(),
+      trialTenantIds(ids),
     ]);
     const monthBy = new Map(months.map((m) => [m.tenantId, m]));
 
     const rows: TenantLimitsDto[] = tenants.map((t) => {
       const own = contacts.filter((c) => c.tenantId === t.id);
       const money = spend.get(t.id)!;
-      const snapshot = limitsSnapshot(t.plan, own.length, money);
+      const snapshot = limitsSnapshot(t.plan, own.length, money, trial.has(t.id));
       const spentUsd = money.spentMicroUsd / MICRO_USD;
       const capReachedAt = monthBy.get(t.id)?.capReachedAt ?? null;
       return {
