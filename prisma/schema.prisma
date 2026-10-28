@@ -49,6 +49,8 @@ model Tenant {
   aiRulesSeededAt          DateTime?
   // Coincidencias inventario ↔ compradores: el asesor aprueba cada mensaje (APPROVAL) o salen solos (AUTO)
   matchAlertMode           MatchAlertMode @default(APPROVAL)
+  // Coincidencias: { sameCity: { PROPERTY, VEHICLE, OTHER }, nearbyCities: [] }; null = valores por defecto
+  matchRules               Json?
   // Asistente del asesor: los mensajes que llegan desde el WhatsApp de un asesor (o del número de avisos) los atiende
   // un asistente interno (agenda, compradores, inventario) en vez del agente de clientes
   advisorAssistant         Boolean        @default(true)

@@ -1,7 +1,7 @@
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { NotFoundError, ValidationError } from "@shared/domain/errors";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
-import { scoreMatch, suggestedMessage, type MatchListing } from "../domain/match";
+import { evaluateMatch, matchRulesFrom, suggestedMessage, type MatchListing } from "../domain/match";
 
 /**
  * Coincidencias inventario ↔ compradores.
@@ -53,22 +53,40 @@ function shortAgentName(name: string | null): string {
   return name?.split(",")[0]?.trim() || "el equipo";
 }
 
+/** Un comprador al que le falló una sola condición: no se le propone mensaje, se le muestra al asesor. */
+export interface NearMiss {
+  leadId: string;
+  name: string;
+  listingTitle: string;
+  missed: string;
+}
+
 export interface MatchRunResult {
   created: number;
   sent: number;
+  nearMisses: NearMiss[];
 }
+
+/** Casi coincidencias que se devuelven por corrida: las mejores. */
+const MAX_NEAR_MISSES = 5;
+/** Bienes que se revisan de una vez con "Revisar ahora" */
+const MAX_LISTINGS_PER_RUN = 300;
 
 export class MatchingService {
   constructor(private readonly whatsapp: WhatsAppProvider) {}
 
-  /** Busca compradores para un bien disponible y crea las propuestas que no existan. */
-  async findMatchesForListing(tenantId: string, listingId: string): Promise<MatchRunResult> {
+  /**
+   * Busca compradores para un bien disponible y crea las propuestas que no existan. Con notifyOwner en false
+   * no le escribe al dueño (la revisión de todo el inventario manda un solo resumen).
+   */
+  async findMatchesForListing(tenantId: string, listingId: string, opts: { notifyOwner?: boolean } = {}): Promise<MatchRunResult> {
     const [tenant, listing] = await Promise.all([
       prisma.tenant.findUnique({ where: { id: tenantId } }),
       prisma.listing.findFirst({ where: { id: listingId, tenantId } }),
     ]);
     if (!tenant || !listing) throw new NotFoundError("Bien no encontrado");
-    if (listing.status !== "AVAILABLE") return { created: 0, sent: 0 };
+    if (listing.status !== "AVAILABLE") return { created: 0, sent: 0, nearMisses: [] };
+    const rules = matchRulesFrom(tenant.matchRules);
 
     const [buyers, existing] = await Promise.all([
       prisma.lead.findMany({
@@ -86,25 +104,34 @@ export class MatchingService {
     const already = new Set(existing.map((m) => m.leadId));
     const target = toMatchListing(listing);
 
-    const candidates = buyers
+    const evaluated = buyers
       .filter((b) => !already.has(b.id))
       .map((b) => {
         const wants = wantsOf(b.qualification, b.productInterest);
-        const result = scoreMatch(target, {
-          searchKind: b.searchKind,
-          searchOperation: b.searchOperation,
-          budgetMaxCop: b.budgetMaxCop === null ? null : Number(b.budgetMaxCop),
-          searchCity: b.searchCity,
-          wants,
-        });
+        const result = evaluateMatch(
+          target,
+          {
+            searchKind: b.searchKind,
+            searchOperation: b.searchOperation,
+            budgetMaxCop: b.budgetMaxCop === null ? null : Number(b.budgetMaxCop),
+            searchCity: b.searchCity,
+            wants,
+          },
+          rules,
+        );
         return result ? { lead: b, wants, ...result } : null;
       })
       .filter((c): c is NonNullable<typeof c> => c !== null)
       // Primero los compradores más calientes y con más puntaje
-      .sort((a, b) => b.score - a.score || tempRank(b.lead.temperature) - tempRank(a.lead.temperature))
-      .slice(0, MAX_MATCHES_PER_LISTING);
+      .sort((a, b) => b.score - a.score || tempRank(b.lead.temperature) - tempRank(a.lead.temperature));
+    const candidates = evaluated.filter((c) => c.status === "match").slice(0, MAX_MATCHES_PER_LISTING);
+    const nearMisses = evaluated.flatMap((c) =>
+      c.status === "near"
+        ? [{ leadId: c.lead.id, name: c.lead.client?.name ?? c.lead.contactName, listingTitle: listing.title, missed: c.missed }]
+        : [],
+    ).slice(0, MAX_NEAR_MISSES);
 
-    if (candidates.length === 0) return { created: 0, sent: 0 };
+    if (candidates.length === 0) return { created: 0, sent: 0, nearMisses };
 
     const created = await prisma.$transaction(
       candidates.map((c) =>
@@ -141,7 +168,7 @@ export class MatchingService {
     }
 
     const pending = created.length - sent;
-    if (pending > 0 && tenant.ownerNotifyPhone) {
+    if (pending > 0 && tenant.ownerNotifyPhone && opts.notifyOwner !== false) {
       const text =
         `🎯 ${pending} comprador${pending === 1 ? "" : "es"} podría${pending === 1 ? "" : "n"} estar interesado${pending === 1 ? "" : "s"} en ${listing.title} (${listing.code}). ` +
         `Revisa y aprueba los mensajes en el panel → Coincidencias.`;
@@ -149,7 +176,39 @@ export class MatchingService {
         console.warn("[matching] no se pudo avisar al dueño:", err),
       );
     }
-    return { created: created.length, sent };
+    return { created: created.length, sent, nearMisses };
+  }
+
+  /** "Revisar ahora": cruza todo el inventario disponible con los compradores y le manda un solo resumen al dueño. */
+  async findMatchesForAvailable(tenantId: string): Promise<MatchRunResult & { listings: number }> {
+    const listings = await prisma.listing.findMany({
+      where: { tenantId, status: "AVAILABLE" },
+      orderBy: { createdAt: "desc" },
+      take: MAX_LISTINGS_PER_RUN,
+      select: { id: true },
+    });
+    const total: MatchRunResult = { created: 0, sent: 0, nearMisses: [] };
+    for (const { id } of listings) {
+      const r = await this.findMatchesForListing(tenantId, id, { notifyOwner: false }).catch((err) => {
+        console.warn("[matching] revisión del inventario:", err);
+        return null;
+      });
+      if (!r) continue;
+      total.created += r.created;
+      total.sent += r.sent;
+      total.nearMisses.push(...r.nearMisses);
+    }
+    const pending = total.created - total.sent;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { ownerNotifyPhone: true } });
+    if (pending > 0 && tenant?.ownerNotifyPhone) {
+      await this.whatsapp
+        .sendText(tenantId, {
+          to: tenant.ownerNotifyPhone,
+          text: `🎯 Revisé el inventario: ${pending} coincidencia${pending === 1 ? "" : "s"} nueva${pending === 1 ? "" : "s"} por aprobar en el panel → Coincidencias.`,
+        })
+        .catch((err) => console.warn("[matching] no se pudo avisar al dueño:", err));
+    }
+    return { ...total, nearMisses: total.nearMisses.slice(0, 20), listings: listings.length };
   }
 
   /** Envía el mensaje de una coincidencia (el sugerido o el que editó el asesor). */

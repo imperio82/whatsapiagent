@@ -53,15 +53,17 @@ const include = {
   _count: { select: { leads: true, matches: { where: { status: "PENDING" as const } } } },
 } as const;
 
+type MatchSummary = Pick<ListingDto, "newMatches" | "nearMatches">;
+
 /** Cruza el bien con los compradores; si falla, el bien igual queda guardado. */
-async function runMatches(matching: MatchingService | undefined, tenantId: string, listingId: string): Promise<number> {
-  if (!matching) return 0;
+async function runMatches(matching: MatchingService | undefined, tenantId: string, listingId: string): Promise<MatchSummary> {
+  if (!matching) return { newMatches: 0, nearMatches: [] };
   try {
-    const { created } = await matching.findMatchesForListing(tenantId, listingId);
-    return created;
+    const { created, nearMisses } = await matching.findMatchesForListing(tenantId, listingId);
+    return { newMatches: created, nearMatches: nearMisses.map(({ leadId, name, missed }) => ({ leadId, name, missed })) };
   } catch (err) {
     console.error("[listings] no se pudieron buscar compradores:", err);
-    return 0;
+    return { newMatches: 0, nearMatches: [] };
   }
 }
 
@@ -120,8 +122,8 @@ export class CreateListingUseCase {
         include,
       });
     });
-    const newMatches = created.status === "AVAILABLE" ? await runMatches(this.matching, tenantId, created.id) : 0;
-    return { ...toDto(created), newMatches };
+    const matches = created.status === "AVAILABLE" ? await runMatches(this.matching, tenantId, created.id) : { newMatches: 0 };
+    return { ...toDto(created), ...matches };
   }
 }
 
@@ -141,10 +143,14 @@ export class UpdateListingUseCase {
       data: { ...rest, ...(priceCop !== undefined ? { priceCop: BigInt(priceCop) } : {}) },
       include,
     });
-    // Al aprobarlo o reactivarlo se buscan compradores (los que ya recibieron propuesta no se repiten)
+    // Al aprobarlo, reactivarlo o cambiarle precio, ciudad o tipo se buscan compradores (los que ya recibieron
+    // propuesta no se repiten)
     const becameAvailable = existing.status !== "AVAILABLE" && updated.status === "AVAILABLE";
-    const newMatches = becameAvailable ? await runMatches(this.matching, tenantId, id) : 0;
-    return { ...toDto(updated), newMatches };
+    const changedForBuyers =
+      updated.priceCop !== existing.priceCop || updated.city !== existing.city || updated.kind !== existing.kind || updated.operation !== existing.operation;
+    const matches =
+      updated.status === "AVAILABLE" && (becameAvailable || changedForBuyers) ? await runMatches(this.matching, tenantId, id) : { newMatches: 0 };
+    return { ...toDto(updated), ...matches };
   }
 }
 

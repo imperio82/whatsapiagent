@@ -90,6 +90,17 @@ export class DismissMatchUseCase {
   }
 }
 
+/** "Revisar ahora": todo el inventario disponible contra los compradores que esperan algo. */
+export class RunAllMatchesUseCase {
+  constructor(private readonly matching: MatchingService) {}
+
+  async execute() {
+    authorize("leads.read");
+    const { tenantId } = TenantContext.require();
+    return this.matching.findMatchesForAvailable(tenantId);
+  }
+}
+
 /** "Buscar compradores" desde el inventario: vuelve a cruzar el bien con los compradores. */
 export class RunListingMatchesUseCase {
   constructor(private readonly matching: MatchingService) {}

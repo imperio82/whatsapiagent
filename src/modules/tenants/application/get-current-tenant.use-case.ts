@@ -4,6 +4,7 @@ import { prisma } from "@shared/infrastructure/prisma/client";
 import type { UseCase } from "@shared/domain/use-case";
 import type { AgentPermissions } from "@modules/ai/domain/agent-permissions";
 import { offerPolicyFrom, type OfferPolicy } from "@modules/ai/domain/offer-policy";
+import { matchRulesFrom, type MatchRules } from "@modules/matching/domain/match";
 
 export interface CurrentTenantDto {
   id: string;
@@ -34,15 +35,18 @@ export interface CurrentTenantDto {
   faq: string | null;
   agentProfile: "RETAIL" | "BROKERAGE";
   matchAlertMode: "APPROVAL" | "AUTO";
+  /** Con los valores por defecto completados */
+  matchRules: MatchRules;
   ownerNotifyPhone: string | null;
   advisorAssistant: boolean;
 }
 
-type TenantRow = Omit<CurrentTenantDto, "aiAutoReply" | "aiAgentName" | "aiPermissions" | "aiOfferPolicy"> & {
+type TenantRow = Omit<CurrentTenantDto, "aiAutoReply" | "aiAgentName" | "aiPermissions" | "aiOfferPolicy" | "matchRules"> & {
   aiAutoReply: boolean;
   aiAgentName: string | null;
   aiPermissions: unknown;
   aiOfferPolicy: unknown;
+  matchRules: unknown;
 };
 
 export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
@@ -70,6 +74,7 @@ export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
     faq: tenant.faq,
     agentProfile: tenant.agentProfile,
     matchAlertMode: tenant.matchAlertMode,
+    matchRules: matchRulesFrom(tenant.matchRules),
     ownerNotifyPhone: tenant.ownerNotifyPhone,
     advisorAssistant: tenant.advisorAssistant,
   };
