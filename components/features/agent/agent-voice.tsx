@@ -190,7 +190,7 @@ export function AgentVoice({ embedded = false }: { embedded?: boolean }): React.
                 </div>
               )}
 
-              {form.provider === "ELEVENLABS" && status.elevenLabsConfigured && <CloneVoice />}
+              {form.provider === "ELEVENLABS" && status.elevenLabsConfigured && !status.elevenLabsFreeOnly && <CloneVoice />}
             </section>
 
             <section className="space-y-3">
