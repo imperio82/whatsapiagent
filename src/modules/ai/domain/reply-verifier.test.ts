@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { extractFeatureClaims, extractPhones, extractPrices, extractSpokenAmounts, verifyReply } from "./reply-verifier";
+import { extractFeatureClaims, extractPhones, extractPrices, extractSpokenAmounts, stripUnverified, verifyReply } from "./reply-verifier";
 
 describe("extractPrices", () => {
   it("lee precios de tienda", () => {
@@ -81,8 +81,8 @@ describe("precios de las tablas de información", () => {
 
 describe("características del inmueble", () => {
   const ficha = JSON.stringify([
-    { code: "INV-0002", title: "Apartamento para estrenar en La Enea", priceCop: 285000000, details: "", photosCount: 0 },
-    { code: "INV-0007", title: "Apartamento en Álamos", priceCop: 2300000, details: "Habitaciones: 2, Baños: 2, Área: 68 m²" },
+    { code: "INV-0002", title: "Apartamento para estrenar en La Enea", priceCop: 285000000, zone: "La Enea", details: "", photosCount: 0 },
+    { code: "INV-0007", title: "Apartamento en Álamos", priceCop: 2300000, zone: "Álamos", details: "Habitaciones: 2, Baños: 2, Área: 68 m²" },
   ]);
 
   it("lee habitaciones, baños y área en los dos órdenes", () => {
@@ -90,21 +90,58 @@ describe("características del inmueble", () => {
     assert.deepEqual(extractFeatureClaims("Habitaciones: 2, Área: 68 m²").sort(), ["habitaciones:2", "m2:68"]);
   });
 
-  it("bloquea habitaciones que no están en la ficha (caso C05)", () => {
-    const r = verifyReply("Apartamento para estrenar en La Enea, 3 habitaciones y parqueadero – $285.000.000", { toolOutputs: [ficha], businessContext: "" });
+  it("bloquea habitaciones que no están en la ficha del bien mostrado (caso C05)", () => {
+    const r = verifyReply("Apartamento para estrenar en La Enea, 3 habitaciones y parqueadero – $285.000.000", {
+      toolOutputs: [ficha],
+      businessContext: "",
+      clientText: "busco 3 habitaciones con parqueadero",
+    });
     assert.equal(r.ok, false);
     assert.match(r.problems.join(" "), /3 habitaciones/);
   });
 
-  it("deja pasar lo que trae la ficha, lo que pidió el cliente o lo que ya se dijo", () => {
-    assert.equal(verifyReply("El de Álamos tiene 2 habitaciones y 68 m², a $2.300.000.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
-    assert.equal(verifyReply("Entiendo, busca 3 habitaciones. ¿En qué ciudad?", { toolOutputs: [], businessContext: "", clientText: "quiero 3 habitaciones" }).ok, true);
-    assert.equal(verifyReply("Sí, el de 2 alcobas.", { toolOutputs: [], businessContext: "", previousReplies: "Tiene 2 habitaciones" }).ok, true);
+  it("revisa también la frase siguiente que no nombra el bien (\"Tiene 3 habitaciones.\")", () => {
+    const r = verifyReply("Le tengo el de La Enea a $285.000.000. Tiene 3 habitaciones.", { toolOutputs: [ficha], businessContext: "" });
+    assert.equal(r.ok, false);
+    const ok = verifyReply("Le tengo el de La Enea a $285.000.000. ¿Usted busca 3 habitaciones?", { toolOutputs: [ficha], businessContext: "" });
+    assert.equal(ok.ok, true);
   });
 
-  it("no afirma que acepta mascotas si la ficha no lo dice (caso C01)", () => {
-    assert.equal(verifyReply("Ese apartamento acepta mascotas.", { toolOutputs: [ficha], businessContext: "" }).ok, false);
+  it("deja pasar lo que trae la ficha o lo que ya se dijo de ese bien", () => {
+    assert.equal(verifyReply("El de Álamos tiene 2 habitaciones y 68 m², a $2.300.000.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
+    assert.equal(
+      verifyReply("El de Álamos tiene 2 habitaciones.", { toolOutputs: [ficha], businessContext: "", previousReplies: "Tiene 2 habitaciones" }).ok,
+      true,
+    );
+  });
+
+  it("no revisa los requisitos del cliente si no se mostró ningún inmueble (caso nuevo)", () => {
+    const client = "Busco arriendo en Pereira, 2 habitaciones, parqueadero y tengo un perro";
+    for (const reply of [
+      "Perfecto, busco opciones de 2 habitaciones con parqueadero donde aceptan mascotas. ¿Qué presupuesto tiene?",
+      "Entiendo, necesita 2 habitaciones y un baño. ¿Para cuándo lo necesita?",
+    ]) {
+      assert.equal(verifyReply(reply, { toolOutputs: [], businessContext: "", clientText: client }).ok, true, reply);
+    }
+  });
+
+  it("no cuenta las preguntas ni los rangos como datos del bien", () => {
+    assert.equal(verifyReply("¿El de Álamos le sirve con 3 habitaciones?", { toolOutputs: [ficha], businessContext: "" }).ok, true);
+    assert.equal(verifyReply("En La Enea tengo opciones de 2 a 3 habitaciones.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
+  });
+
+  it("no afirma que un bien acepta mascotas si su ficha no lo dice (caso C01)", () => {
+    assert.equal(verifyReply("Ese apartamento acepta mascotas.", { toolOutputs: [ficha], businessContext: "", clientText: "tengo un perro" }).ok, false);
     assert.equal(verifyReply("Un asesor le confirma si acepta mascotas.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
     assert.equal(verifyReply("No acepta mascotas.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
+  });
+
+  it("la respuesta segura quita solo las frases que no pasan", () => {
+    const evidence = { toolOutputs: [ficha], businessContext: "" };
+    assert.equal(
+      stripUnverified("Le tengo el de La Enea a $285.000.000. Tiene 3 habitaciones y parqueadero. ¿Le gustaría verlo?", evidence),
+      "Le tengo el de La Enea a $285.000.000. ¿Le gustaría verlo?",
+    );
+    assert.equal(stripUnverified("El de La Enea tiene 3 habitaciones.", evidence), "");
   });
 });

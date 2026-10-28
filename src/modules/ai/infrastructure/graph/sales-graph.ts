@@ -9,7 +9,7 @@ import {
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
 import type { AITool, ChatMessage } from "../../domain/ports/ai-provider";
-import { verifyReply } from "../../domain/reply-verifier";
+import { stripUnverified, verifyReply } from "../../domain/reply-verifier";
 import { COMMON_RULES } from "../system-prompt";
 import { decideVoiceReply, type VoiceDecision, type VoicePolicy } from "@modules/voice/domain/voice-policy";
 import { createChatModel } from "./chat-model";
@@ -22,7 +22,8 @@ import { GRAPH_PROFILES, type GraphProfile } from "./profiles";
  *
  *   router ─┬─ especialista ─ verificador ─┬─ voz ─ END
  *           │   (ventas, pedido, info…)    ├─ (falla 1 vez) ─ vuelve al especialista con la corrección
- *           │                              └─ (falla 2 veces) ─ humano ─ END
+ *           │                              └─ (falla 2 veces) ─ seguro ─ voz ─ END
+ *           │                                 (sin las frases que no pasaron; si no queda nada, humano)
  *           └─ humano ─ END
  *
  * "voz" decide con código fijo si la respuesta ya verificada sale como nota de voz o por texto
@@ -340,7 +341,29 @@ export async function runSalesGraph(input: {
 
   function afterVerification(state: GraphState): string {
     if (state.verified) return "voz";
-    return state.attempts <= MAX_RETRIES ? "especialista" : "humano";
+    return state.attempts <= MAX_RETRIES ? "especialista" : "seguro";
+  }
+
+  // ── seguro: la verificación falló dos veces ──────────────────────────────
+  // Un dato dudoso no es motivo para pasar a una persona: se envía la respuesta sin las frases que no pasaron
+  // y se sigue atendiendo. Solo si no queda nada que enviar (por ejemplo, la respuesta venía vacía) pasa a humano.
+  function seguro(state: GraphState): Partial<GraphState> {
+    const evidence = { toolOutputs: state.toolOutputs, businessContext: `${input.businessContext}${turnContext}`, clientText, previousReplies };
+    const kept = stripUnverified(state.reply, evidence);
+    const reply = kept || (state.reply.trim() ? profile.safeReply : "");
+    if (!reply) return { reply: "" };
+    return {
+      reply,
+      verified: true,
+      trace: [{
+        node: "seguro",
+        type: "verificacion",
+        ok: true,
+        detail: kept
+          ? `se envió sin las frases que no pasaron la verificación: ${state.correction ?? ""}`
+          : `ninguna frase pasó la verificación; se envió la respuesta segura: ${state.correction ?? ""}`,
+      }],
+    };
   }
 
   // ── voz: texto o nota de voz, con código fijo ────────────────────────────
@@ -382,6 +405,7 @@ export async function runSalesGraph(input: {
     .addNode("especialista", specialist)
     .addNode("verificador", verificador)
     .addNode("humano", humano)
+    .addNode("seguro", seguro)
     .addNode("voz", voz)
     .addEdge(START, "router")
     .addConditionalEdges("router", (s: GraphState) => (s.intent === "humano" ? "humano" : "especialista"), [
@@ -389,7 +413,8 @@ export async function runSalesGraph(input: {
       "humano",
     ])
     .addEdge("especialista", "verificador")
-    .addConditionalEdges("verificador", afterVerification, ["especialista", "humano", "voz"])
+    .addConditionalEdges("verificador", afterVerification, ["especialista", "seguro", "voz"])
+    .addConditionalEdges("seguro", (s: GraphState) => (s.reply ? "voz" : "humano"), ["voz", "humano"])
     .addEdge("voz", END)
     .addEdge("humano", END)
     .compile();
