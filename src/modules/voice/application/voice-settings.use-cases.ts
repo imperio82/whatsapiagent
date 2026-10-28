@@ -14,6 +14,7 @@ import {
   geminiConfigured,
   listElevenLabsVoices,
   synthesizeSpeech,
+  type ElevenLabsVoice,
 } from "../infrastructure/speech";
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd } from "../infrastructure/voice-pricing";
 import { resolveTtsModel } from "../infrastructure/voice-model-setting";
@@ -84,9 +85,30 @@ export class GetVoiceSettingsUseCase {
   }
 }
 
+const LANGUAGE_NAMES: Record<string, string> = { es: "español", en: "inglés", pt: "portugués", fr: "francés", it: "italiano", de: "alemán" };
+const CATEGORY_NAMES: Record<string, string> = {
+  premade: "Prediseñada",
+  professional: "De la biblioteca",
+  generated: "Diseñada",
+  cloned: "Clonada",
+  famous: "De la biblioteca",
+  high_quality: "De la biblioteca",
+};
+
+/** "Español · colombian · De la biblioteca", para elegir sin escuchar todas. */
+function elevenLabsDescription(v: ElevenLabsVoice): string {
+  const language = v.language ? (LANGUAGE_NAMES[v.language.toLowerCase()] ?? v.language) : null;
+  const parts = [language, v.accent, CATEGORY_NAMES[v.category] ?? null].filter(Boolean) as string[];
+  if (parts.length > 0) return parts.map((p, i) => (i === 0 ? p.charAt(0).toUpperCase() + p.slice(1) : p)).join(" · ");
+  return v.description ?? "Voz de ElevenLabs";
+}
+
+const speaksSpanish = (v: ElevenLabsVoice) => v.language?.toLowerCase().startsWith("es") || /spanish|espa|latin|colomb|mexic/i.test(`${v.accent ?? ""} ${v.description ?? ""}`);
+
 /**
- * Voces que puede usar el negocio: las de Gemini, las prediseñadas de ElevenLabs y solo sus propias
- * voces clonadas (la cuenta de ElevenLabs es compartida por todos los negocios).
+ * Voces que puede usar el negocio: las de Gemini, sus propias voces clonadas y todas las de la cuenta de
+ * ElevenLabs (prediseñadas y las que se agregan a My Voices desde la Voice Library), menos las que clonó
+ * otro negocio: la cuenta es compartida por todos. Las que hablan español van primero.
  */
 async function voiceOptions(tenantId: string): Promise<VoiceOptionDto[]> {
   const gemini: VoiceOptionDto[] = GEMINI_VOICES.map((v) => ({
@@ -97,20 +119,24 @@ async function voiceOptions(tenantId: string): Promise<VoiceOptionDto[]> {
   }));
   if (!(await elevenLabsConfigured())) return gemini;
 
-  const [account, clones] = await Promise.all([
+  const [account, clones, othersClones] = await Promise.all([
     listElevenLabsVoices().catch((err) => {
       console.error("[voz] no se pudieron listar las voces de ElevenLabs:", err);
       return [];
     }),
     prisma.clonedVoice.findMany({ where: { tenantId }, orderBy: { createdAt: "desc" } }),
+    prisma.clonedVoice.findMany({ where: { tenantId: { not: tenantId } }, select: { providerVoiceId: true } }),
   ]);
-  const premade: VoiceOptionDto[] = account
-    .filter((v) => v.category === "premade")
+  // Las clonadas desde la app ya van arriba (las propias) o son de otro negocio
+  const hidden = new Set([...clones.map((c) => c.providerVoiceId), ...othersClones.map((c) => c.providerVoiceId)]);
+  const library: VoiceOptionDto[] = account
+    .filter((v) => !hidden.has(v.voiceId))
+    .sort((a, b) => Number(speaksSpanish(b)) - Number(speaksSpanish(a)))
     .map((v) => ({
       provider: "ELEVENLABS",
       voiceId: v.voiceId,
       name: v.name,
-      description: v.description ?? "Voz prediseñada",
+      description: elevenLabsDescription(v),
       previewUrl: v.previewUrl,
     }));
   const cloned: VoiceOptionDto[] = clones.map((c) => ({
@@ -121,7 +147,7 @@ async function voiceOptions(tenantId: string): Promise<VoiceOptionDto[]> {
     cloned: true,
     clonedId: c.id,
   }));
-  return [...gemini, ...cloned, ...premade];
+  return [...gemini, ...cloned, ...library];
 }
 
 export const updateVoiceSettingsSchema = z.object({

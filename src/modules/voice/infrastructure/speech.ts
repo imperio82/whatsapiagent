@@ -200,9 +200,13 @@ export async function transcribeAudio(audio: Buffer, mimeType: string): Promise<
 export interface ElevenLabsVoice {
   voiceId: string;
   name: string;
+  /** premade (de ElevenLabs), professional o generated (de la Voice Library o diseñadas), cloned… */
   category: string;
   description: string | null;
   previewUrl: string | null;
+  /** Código de idioma ("es", "en") y acento ("colombian", "american"), si ElevenLabs los trae */
+  language: string | null;
+  accent: string | null;
 }
 
 export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
@@ -211,15 +215,30 @@ export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
   const res = await safeFetch(`${ELEVENLABS_BASE}/voices`, { headers: { "xi-api-key": apiKey } });
   if (!res.ok) throw new InfrastructureError(`ElevenLabs no devolvió las voces: ${await elevenLabsError(res)}`);
   const json = (await res.json()) as {
-    voices?: { voice_id: string; name: string; category?: string; description?: string | null; preview_url?: string | null; labels?: Record<string, string> }[];
+    voices?: {
+      voice_id: string;
+      name: string;
+      category?: string;
+      description?: string | null;
+      preview_url?: string | null;
+      labels?: Record<string, string>;
+      verified_languages?: { language?: string; accent?: string }[];
+    }[];
   };
-  return (json.voices ?? []).map((v) => ({
-    voiceId: v.voice_id,
-    name: v.name,
-    category: v.category ?? "premade",
-    description: v.description ?? (v.labels ? Object.values(v.labels).join(", ") : null),
-    previewUrl: v.preview_url ?? null,
-  }));
+  return (json.voices ?? []).map((v) => {
+    // Las voces de la Voice Library traen el idioma en labels o en verified_languages
+    const spanish = v.verified_languages?.find((l) => l.language === "es");
+    const verified = spanish ?? v.verified_languages?.[0];
+    return {
+      voiceId: v.voice_id,
+      name: v.name,
+      category: v.category ?? "premade",
+      description: v.description ?? (v.labels ? Object.values(v.labels).join(", ") : null),
+      previewUrl: v.preview_url ?? null,
+      language: v.labels?.language ?? verified?.language ?? null,
+      accent: v.labels?.accent ?? verified?.accent ?? null,
+    };
+  });
 }
 
 /** Clonación instantánea: con uno o varios audios de la persona (lo ideal, 1 a 3 minutos en total). */
