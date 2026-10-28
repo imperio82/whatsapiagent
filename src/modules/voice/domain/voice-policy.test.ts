@@ -60,6 +60,6 @@ test("detección de datos", () => {
 });
 
 test("texto para leer en voz alta sin emojis ni formato", () => {
-  assert.equal(speakableText("¡Listo! ✅ *Quedó* tu pedido ☕"), "¡Listo! Quedó tu pedido");
-  assert.equal(estimateSeconds("a".repeat(150)), 10);
+  assert.equal(speakableText("¡Listo! ✅ *Quedó* tu pedido ☕"), "¡Listo! Quedó tu pedido.");
+  assert.equal(estimateSeconds(`${"a".repeat(149)}.`), 10);
 });
