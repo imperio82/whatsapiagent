@@ -7,7 +7,7 @@ export interface NearMatch {
   listingTitle?: string;
 }
 
-/** "Anderson busca en Manizales; Laura: su presupuesto es hasta $60.000.000" */
+/** "Ana: busca en otra ciudad · Luis: su presupuesto es hasta …" */
 function nearText(near: NearMatch[], withListing = false): string {
   const shown = near
     .slice(0, 3)

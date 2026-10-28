@@ -51,7 +51,7 @@ const cop = (v: number) => `$${v.toLocaleString("es-CO")}`;
 
 /**
  * Cómo cruza cada negocio la ciudad: si un tipo de bien la exige, otra ciudad descarta al comprador; si no,
- * solo deja de sumar. Las ciudades cercanas cuentan como la misma (un carro de Pereira se vende en Manizales).
+ * solo deja de sumar. Las ciudades cercanas cuentan como la misma (un carro se puede vender en el municipio vecino).
  */
 export interface MatchRules {
   sameCity: Record<Kind, boolean>;

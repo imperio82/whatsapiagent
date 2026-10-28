@@ -370,7 +370,7 @@ export default function MyAgentPage(): React.ReactElement {
                     id="nearbyCities"
                     value={nearbyCities}
                     onChange={(e) => setNearbyCities(e.target.value)}
-                    placeholder="Pereira, Dosquebradas, Santa Rosa de Cabal, Manizales, Armenia"
+                    placeholder="Ej: tu ciudad y los municipios vecinos, separados por coma"
                   />
                   <p className="text-[11px] text-muted-foreground">Separadas por coma. Déjalo vacío si no aplica.</p>
                 </div>
