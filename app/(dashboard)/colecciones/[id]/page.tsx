@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Target,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -38,6 +39,7 @@ import {
   useUpdateCollectionColumns,
 } from "@hooks/use-collections";
 import { useCreateListing, useListing, useUpdateListing } from "@hooks/use-listings";
+import { useRunListingMatches } from "@hooks/use-matches";
 import { useCreateProduct, useDeleteProduct, useProduct, useUpdateProduct } from "@hooks/use-products";
 import type { CollectionDto, CollectionRowDto } from "@modules/collections/application/collections.use-cases";
 import { cn } from "@lib/utils";
@@ -398,6 +400,7 @@ function ListingEditor({ rowId, onClose }: { rowId: string | null; onClose: () =
   const { data: listing, isLoading } = useListing(rowId);
   const create = useCreateListing();
   const update = useUpdateListing();
+  const findBuyers = useRunListingMatches();
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -407,6 +410,14 @@ function ListingEditor({ rowId, onClose }: { rowId: string | null; onClose: () =
             La IA solo usa la información pública: nombre, precio, ciudad, barrio, características, descripción y fotos.
           </DialogDescription>
         </DialogHeader>
+        {listing?.status === "AVAILABLE" && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2 text-xs text-muted-foreground">
+            <span>Busca de nuevo compradores que esperan algo así (los que ya recibieron propuesta no se repiten).</span>
+            <Button size="sm" variant="outline" disabled={findBuyers.isPending} onClick={() => findBuyers.mutate(listing.id)}>
+              <Target className="h-4 w-4" /> {findBuyers.isPending ? "Buscando…" : "Buscar interesados"}
+            </Button>
+          </div>
+        )}
         {rowId && isLoading ? (
           <div className="h-48 animate-pulse rounded-md bg-muted/50" />
         ) : (

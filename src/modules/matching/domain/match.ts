@@ -49,8 +49,50 @@ const IGNORED = new Set(["busca", "quiere", "comprar", "arrendar", "algo", "buen
 
 const cop = (v: number) => `$${v.toLocaleString("es-CO")}`;
 
-export function scoreMatch(listing: MatchListing, buyer: MatchBuyer): MatchResult | null {
+/**
+ * Cómo cruza cada negocio la ciudad: si un tipo de bien la exige, otra ciudad descarta al comprador; si no,
+ * solo deja de sumar. Las ciudades cercanas cuentan como la misma (un carro se puede vender en el municipio vecino).
+ */
+export interface MatchRules {
+  sameCity: Record<Kind, boolean>;
+  nearbyCities: string[];
+}
+
+export const DEFAULT_MATCH_RULES: MatchRules = {
+  sameCity: { PROPERTY: true, VEHICLE: false, OTHER: false },
+  nearbyCities: [],
+};
+
+/** Lo guardado del negocio, con lo que falte en su valor por defecto. */
+export function matchRulesFrom(raw: unknown): MatchRules {
+  const r = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const same = r.sameCity && typeof r.sameCity === "object" ? (r.sameCity as Record<string, unknown>) : {};
+  const flag = (k: Kind) => (typeof same[k] === "boolean" ? (same[k] as boolean) : DEFAULT_MATCH_RULES.sameCity[k]);
+  return {
+    sameCity: { PROPERTY: flag("PROPERTY"), VEHICLE: flag("VEHICLE"), OTHER: flag("OTHER") },
+    nearbyCities: Array.isArray(r.nearbyCities)
+      ? r.nearbyCities.filter((c): c is string => typeof c === "string" && c.trim() !== "").map((c) => c.trim())
+      : [],
+  };
+}
+
+/**
+ * Coincide, casi coincide (falló una sola condición y lo demás alcanza) o nada. La casi coincidencia no
+ * genera mensaje: se le muestra al asesor para que decida.
+ */
+export type MatchEvaluation = ({ status: "match" } & MatchResult) | ({ status: "near"; missed: string } & MatchResult) | null;
+
+function sameArea(listing: MatchListing, city: string, nearby: string[]): boolean {
+  const wanted = normalize(city);
+  const where = normalize(`${listing.city} ${listing.zone ?? ""}`);
+  if (where.includes(wanted) || wanted.includes(normalize(listing.city))) return true;
+  const area = nearby.map(normalize);
+  return area.some((c) => wanted.includes(c)) && area.includes(normalize(listing.city));
+}
+
+export function evaluateMatch(listing: MatchListing, buyer: MatchBuyer, rules: MatchRules = DEFAULT_MATCH_RULES): MatchEvaluation {
   const reasons: string[] = [];
+  const missed: string[] = [];
   let score = 0;
 
   if (buyer.searchKind) {
@@ -59,20 +101,25 @@ export function scoreMatch(listing: MatchListing, buyer: MatchBuyer): MatchResul
     reasons.push(`busca ${KIND_WORD[listing.kind]}`);
   }
   if (buyer.searchOperation) {
-    if (buyer.searchOperation !== listing.operation) return null;
-    score += 1;
+    if (buyer.searchOperation !== listing.operation) missed.push(buyer.searchOperation === "RENT" ? "busca en arriendo" : "busca para comprar");
+    else score += 1;
   }
   if (buyer.budgetMaxCop && listing.priceCop > 0) {
-    if (listing.priceCop > buyer.budgetMaxCop * BUDGET_MARGIN) return null;
-    score += 2;
-    reasons.push(`presupuesto hasta ${cop(buyer.budgetMaxCop)}`);
+    if (listing.priceCop > buyer.budgetMaxCop * BUDGET_MARGIN) missed.push(`su presupuesto es hasta ${cop(buyer.budgetMaxCop)}`);
+    else {
+      score += 2;
+      reasons.push(`presupuesto hasta ${cop(buyer.budgetMaxCop)}`);
+    }
   }
   if (buyer.searchCity) {
-    const wanted = normalize(buyer.searchCity);
-    const where = normalize(`${listing.city} ${listing.zone ?? ""}`);
-    if (!where.includes(wanted) && !wanted.includes(normalize(listing.city))) return null;
-    score += 2;
-    reasons.push(`en ${buyer.searchCity}`);
+    if (sameArea(listing, buyer.searchCity, rules.nearbyCities)) {
+      score += 2;
+      reasons.push(`en ${buyer.searchCity}`);
+    } else if (rules.sameCity[listing.kind]) {
+      missed.push(`busca en ${buyer.searchCity}`);
+    } else {
+      reasons.push(`busca en ${buyer.searchCity}, el bien está en ${listing.city}`);
+    }
   }
 
   // Palabras de lo que busca que aparecen en el bien (máximo 3 puntos)
@@ -93,7 +140,14 @@ export function scoreMatch(listing: MatchListing, buyer: MatchBuyer): MatchResul
 
   // Sin saber al menos el tipo de bien o alguna palabra en común, no se arriesga un mensaje
   if (!buyer.searchKind && !reasons.some((r) => r.startsWith("pidió"))) return null;
-  return score >= MIN_SCORE ? { score, reasons } : null;
+  if (score < MIN_SCORE || missed.length > 1) return null;
+  return missed.length === 0 ? { status: "match", score, reasons } : { status: "near", score, reasons, missed: missed[0]! };
+}
+
+/** Solo las coincidencias completas. */
+export function scoreMatch(listing: MatchListing, buyer: MatchBuyer, rules: MatchRules = DEFAULT_MATCH_RULES): MatchResult | null {
+  const r = evaluateMatch(listing, buyer, rules);
+  return r?.status === "match" ? { score: r.score, reasons: r.reasons } : null;
 }
 
 /** Mensaje sugerido para el cliente; el asesor lo puede editar antes de enviarlo. */

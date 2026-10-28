@@ -4,6 +4,7 @@ import {
   DismissMatchUseCase,
   ListMatchesUseCase,
   MATCH_STATUSES,
+  RunAllMatchesUseCase,
   RunListingMatchesUseCase,
   SendMatchUseCase,
   sendMatchSchema,
@@ -17,6 +18,7 @@ export class MatchingController {
   private readonly sendUC = new SendMatchUseCase(this.service);
   private readonly dismissUC = new DismissMatchUseCase(this.service);
   private readonly runUC = new RunListingMatchesUseCase(this.service);
+  private readonly runAllUC = new RunAllMatchesUseCase(this.service);
 
   list(status: string | null): Promise<MatchDto[]> {
     const valid = MATCH_STATUSES.includes(status as MatchStatusValue) ? (status as MatchStatusValue) : undefined;
@@ -33,5 +35,9 @@ export class MatchingController {
 
   runForListing(listingId: string): Promise<MatchRunResult> {
     return this.runUC.execute(listingId);
+  }
+
+  runAll() {
+    return this.runAllUC.execute();
   }
 }

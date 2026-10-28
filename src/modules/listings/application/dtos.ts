@@ -79,6 +79,8 @@ export interface ListingDto {
   pendingMatches: number;
   /** Solo al crear o actualizar: compradores nuevos que coinciden con el bien. */
   newMatches?: number;
+  /** Solo al crear o actualizar: compradores a los que les falló una condición (otra ciudad, presupuesto…). */
+  nearMatches?: { leadId: string; name: string; missed: string }[];
   createdAt: string;
   updatedAt: string;
 }

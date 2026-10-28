@@ -4,11 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { ImageOff, Send, Target, X } from "lucide-react";
+import { ImageOff, RefreshCw, Send, Target, X } from "lucide-react";
 import { Badge, type BadgeProps } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
-import { useDismissMatch, useMatches, useSendMatch } from "@hooks/use-matches";
+import { useDismissMatch, useMatches, useRunAllMatches, useSendMatch } from "@hooks/use-matches";
 import { useCurrentTenant } from "@hooks/use-tenant";
 import { clientPhoneToDisplay } from "@shared/domain/wa-jid";
 import type { MatchDto, MatchStatusValue } from "@modules/matching/application/use-cases";
@@ -37,6 +37,8 @@ export default function MatchesPage(): React.ReactElement {
   const { data: tenant } = useCurrentTenant();
   const { data, isLoading } = useMatches(tab);
   const { data: pending } = useMatches("PENDING");
+  const review = useRunAllMatches();
+  const near = review.data?.nearMisses ?? [];
 
   // Se agrupan por bien: el asesor ve "entró este carro → estos compradores"
   const groups = new Map<string, { listing: MatchDto["listing"]; matches: MatchDto[] }>();
@@ -58,10 +60,40 @@ export default function MatchesPage(): React.ReactElement {
               : "Nada se envía sin tu aprobación: revisa, edita si quieres y envía."}
           </p>
         </div>
-        <Link href="/configuracion/ia" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-          Cambiar a {tenant?.matchAlertMode === "AUTO" ? "aprobación manual" : "envío automático"}
-        </Link>
+        <div className="flex flex-col items-end gap-2">
+          <Button size="sm" variant="outline" disabled={review.isPending} onClick={() => review.mutate()}>
+            <RefreshCw className={cn("h-4 w-4", review.isPending && "animate-spin")} />
+            {review.isPending ? "Revisando…" : "Revisar inventario ahora"}
+          </Button>
+          <Link href="/configuracion/ia" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
+            Cambiar a {tenant?.matchAlertMode === "AUTO" ? "aprobación manual" : "envío automático"} o las reglas de ciudad
+          </Link>
+        </div>
       </div>
+
+      {near.length > 0 && (
+        <Card className="border-amber-500/40">
+          <CardContent className="space-y-2 p-4 text-sm">
+            <div className="font-medium">Casi coinciden ({near.length})</div>
+            <p className="text-xs text-muted-foreground">
+              A estos compradores les falla una sola condición, así que no se les propuso mensaje. Si igual les sirve, escríbeles
+              desde su conversación.
+            </p>
+            <ul className="space-y-1">
+              {near.map((n) => (
+                <li key={`${n.leadId}-${n.listingTitle}`} className="flex flex-wrap gap-x-2">
+                  <Link href="/leads" className="font-medium underline-offset-4 hover:underline">
+                    {n.name}
+                  </Link>
+                  <span className="text-muted-foreground">
+                    · {n.listingTitle}: {n.missed}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-1">
         {TABS.map((t) => (

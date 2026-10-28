@@ -32,6 +32,12 @@ export const updateTenantSchema = z.object({
   faq: z.string().max(5000).nullable().optional(),
   agentProfile: z.enum(["RETAIL", "BROKERAGE"]).optional(),
   matchAlertMode: z.enum(["APPROVAL", "AUTO"]).optional(),
+  matchRules: z
+    .object({
+      sameCity: z.object({ PROPERTY: z.boolean(), VEHICLE: z.boolean(), OTHER: z.boolean() }),
+      nearbyCities: z.array(z.string().trim().min(2).max(60)).max(30),
+    })
+    .optional(),
   advisorAssistant: z.boolean().optional(),
   ownerNotifyPhone: z
     .string()

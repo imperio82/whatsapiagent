@@ -30,6 +30,7 @@ import { AgentVoice } from "@components/features/agent/agent-voice";
 import { BusinessKnowledgeForm } from "@components/features/agent/business-knowledge-form";
 import { TrainAgentForm } from "@components/features/agent/train-agent-form";
 import { useCurrentTenant, useUpdateTenant } from "@hooks/use-tenant";
+import { DEFAULT_MATCH_RULES, type MatchRules } from "@modules/matching/domain/match";
 import { AGENT_RESOURCES, agentPermissionsFrom, resourcesFor } from "@modules/ai/domain/agent-permissions";
 
 type Profile = "RETAIL" | "BROKERAGE";
@@ -131,6 +132,8 @@ export default function MyAgentPage(): React.ReactElement {
   const [profile, setProfile] = useState<Profile>("RETAIL");
   const [notifyPhone, setNotifyPhone] = useState("");
   const [matchMode, setMatchMode] = useState<"APPROVAL" | "AUTO">("APPROVAL");
+  const [sameCity, setSameCity] = useState<MatchRules["sameCity"]>(DEFAULT_MATCH_RULES.sameCity);
+  const [nearbyCities, setNearbyCities] = useState("");
   const [section, setSection] = useState<Section | null>(null);
 
   useEffect(() => {
@@ -140,6 +143,8 @@ export default function MyAgentPage(): React.ReactElement {
       setProfile(tenant.agentProfile ?? "RETAIL");
       setNotifyPhone(tenant.ownerNotifyPhone ?? "");
       setMatchMode(tenant.matchAlertMode ?? "APPROVAL");
+      setSameCity(tenant.matchRules?.sameCity ?? DEFAULT_MATCH_RULES.sameCity);
+      setNearbyCities((tenant.matchRules?.nearbyCities ?? []).join(", "));
     }
   }, [tenant]);
 
@@ -155,6 +160,17 @@ export default function MyAgentPage(): React.ReactElement {
       agentProfile: profile,
       ownerNotifyPhone: notifyPhone.trim() || null,
       matchAlertMode: matchMode,
+      ...(tenant?.agentProfile === "BROKERAGE"
+        ? {
+            matchRules: {
+              sameCity,
+              nearbyCities: nearbyCities
+                .split(",")
+                .map((c) => c.trim())
+                .filter((c) => c.length >= 2),
+            },
+          }
+        : {}),
     });
   }
 
@@ -328,6 +344,36 @@ export default function MyAgentPage(): React.ReactElement {
                     <span className="block text-xs text-muted-foreground">{option.text}</span>
                   </button>
                 ))}
+              </div>
+              <div className="space-y-2 rounded-md border border-border p-3">
+                <div className="text-sm font-medium">La ciudad del comprador</div>
+                <p className="text-xs text-muted-foreground">
+                  Si la exiges, a quien busca en otra ciudad no se le propone mensaje (te sale como "casi coincide"). Si no, la
+                  misma ciudad solo suma puntos.
+                </p>
+                {(
+                  [
+                    ["PROPERTY", "Exigir la misma ciudad en inmuebles"],
+                    ["VEHICLE", "Exigir la misma ciudad en vehículos"],
+                  ] as const
+                ).map(([kind, label]) => (
+                  <label key={kind} className="flex items-center justify-between gap-3 text-sm">
+                    {label}
+                    <Switch checked={sameCity[kind]} onCheckedChange={(v) => setSameCity({ ...sameCity, [kind]: v })} />
+                  </label>
+                ))}
+                <div className="space-y-1.5 pt-1">
+                  <Label htmlFor="nearbyCities" className="text-xs">
+                    Ciudades cercanas (cuentan como la misma)
+                  </Label>
+                  <Input
+                    id="nearbyCities"
+                    value={nearbyCities}
+                    onChange={(e) => setNearbyCities(e.target.value)}
+                    placeholder="Ej: tu ciudad y los municipios vecinos, separados por coma"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Separadas por coma. Déjalo vacío si no aplica.</p>
+                </div>
               </div>
             </div>
           )}
