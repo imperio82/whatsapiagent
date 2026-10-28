@@ -3,6 +3,7 @@ import { speakableText, type VoiceProviderKind } from "../domain/voice-policy";
 import { encodeOggOpus, parseWav, pcmSeconds, type PcmAudio } from "./ogg-opus";
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd, transcriptionCostMicroUsd } from "./voice-pricing";
 import { resolveTtsModel } from "./voice-model-setting";
+import { elevenLabsApiKey } from "./elevenlabs-key";
 
 /**
  * Voz con Gemini (incluida, con la misma clave del agente) y ElevenLabs (voces premium y clonadas).
@@ -25,8 +26,9 @@ export function geminiConfigured(): boolean {
   return !!process.env.GEMINI_API_KEY;
 }
 
-export function elevenLabsConfigured(): boolean {
-  return !!process.env.ELEVENLABS_API_KEY;
+/** Hay clave de ElevenLabs (del panel o del .env) y está prendido en /plataforma. */
+export async function elevenLabsConfigured(): Promise<boolean> {
+  return !!(await elevenLabsApiKey());
 }
 
 export interface SynthesizedVoice {
@@ -126,8 +128,8 @@ async function geminiSpeechWith(
 }
 
 async function elevenLabsSpeech(voiceId: string, text: string): Promise<SynthesizedVoice> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) throw new InfrastructureError("La plataforma no tiene ElevenLabs configurado (ELEVENLABS_API_KEY)");
+  const apiKey = await elevenLabsApiKey();
+  if (!apiKey) throw new InfrastructureError("La plataforma no tiene ElevenLabs activo");
   const model = elevenLabsModel();
   const res = await safeFetch(
     `${ELEVENLABS_BASE}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=pcm_24000`,
@@ -204,7 +206,7 @@ export interface ElevenLabsVoice {
 }
 
 export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = await elevenLabsApiKey();
   if (!apiKey) return [];
   const res = await safeFetch(`${ELEVENLABS_BASE}/voices`, { headers: { "xi-api-key": apiKey } });
   if (!res.ok) throw new InfrastructureError(`ElevenLabs no devolvió las voces: ${await elevenLabsError(res)}`);
@@ -222,8 +224,8 @@ export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
 
 /** Clonación instantánea: con uno o varios audios de la persona (lo ideal, 1 a 3 minutos en total). */
 export async function cloneElevenLabsVoice(name: string, samples: { name: string; type: string; data: Buffer }[]): Promise<string> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) throw new InfrastructureError("La plataforma no tiene ElevenLabs configurado (ELEVENLABS_API_KEY)");
+  const apiKey = await elevenLabsApiKey();
+  if (!apiKey) throw new InfrastructureError("La plataforma no tiene ElevenLabs activo");
   const form = new FormData();
   form.append("name", name);
   form.append("remove_background_noise", "true");
@@ -236,7 +238,7 @@ export async function cloneElevenLabsVoice(name: string, samples: { name: string
 }
 
 export async function deleteElevenLabsVoice(voiceId: string): Promise<void> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = await elevenLabsApiKey();
   if (!apiKey) return;
   const res = await safeFetch(`${ELEVENLABS_BASE}/voices/${encodeURIComponent(voiceId)}`, {
     method: "DELETE",

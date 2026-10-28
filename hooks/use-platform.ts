@@ -8,6 +8,7 @@ import type { AddBillingEntryInput, UpdateTenantBillingInput } from "@modules/pl
 import type { SetAgentModelInput } from "@modules/platform/application/agent-model.use-cases";
 import type { SetVoiceModelInput } from "@modules/platform/application/voice-model.use-cases";
 import type { SetTrialInput } from "@modules/platform/application/trial.use-cases";
+import type { SetElevenLabsInput } from "@modules/platform/application/elevenlabs.use-cases";
 import type { SetEnforcementInput } from "@modules/platform/application/usage-limits.use-cases";
 import type { ResolveRechargeInput } from "@modules/platform/application/recharges-admin.use-cases";
 
@@ -73,6 +74,30 @@ export function useSetAgentModel() {
     onSuccess: (data) => {
       qc.setQueryData([KEY, "agent-model"], data);
       toast.success(`El agente ahora responde con ${data.current.modelName}`);
+    },
+    onError,
+  });
+}
+
+export function useElevenLabsSettings() {
+  return useQuery({ queryKey: [KEY, "elevenlabs"], queryFn: () => platformService.elevenLabs() });
+}
+
+export function useSetElevenLabsSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SetElevenLabsInput) => platformService.setElevenLabs(input),
+    onSuccess: (data, input) => {
+      qc.setQueryData([KEY, "elevenlabs"], data);
+      toast.success(
+        input.apiKey
+          ? "Clave de ElevenLabs guardada"
+          : input.removeKey
+            ? "Clave de ElevenLabs borrada del panel"
+            : data.enabled
+              ? "ElevenLabs activado para los negocios"
+              : "ElevenLabs desactivado: los negocios solo ven las voces de Gemini",
+      );
     },
     onError,
   });

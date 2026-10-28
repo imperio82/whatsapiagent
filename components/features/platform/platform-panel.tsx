@@ -50,6 +50,7 @@ import type { PlatformTenantDto } from "@modules/platform/application/platform.u
 import { cn } from "@lib/utils";
 import { AgentModelCard } from "./agent-model-card";
 import { VoiceModelCard } from "./voice-model-card";
+import { ElevenLabsCard } from "./elevenlabs-card";
 import { TrialCard } from "./trial-card";
 import { UsageLimitsCard } from "./usage-limits-card";
 import { RechargesCard } from "./recharges-card";
@@ -167,6 +168,8 @@ export function PlatformPanel(): React.ReactElement {
       <AgentModelCard />
 
       <VoiceModelCard />
+
+      <ElevenLabsCard />
 
       <Card>
         <div className="flex items-center gap-3 border-b border-border p-3">
