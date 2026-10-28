@@ -11,7 +11,16 @@ const TIME_ZONE = "America/Bogota";
 
 /** Los clientes creados automáticamente se llaman "Cliente 1234" (o "lid:…"): no es su nombre real. */
 export function isGenericClientName(name: string | null | undefined): boolean {
-  return !name?.trim() || /^Cliente \d+$/.test(name.trim()) || name.startsWith("lid:");
+  return !name?.trim() || /^Cliente \d+$/.test(name.trim()) || name.startsWith("lid:") || looksLikeHandle(name.trim());
+}
+
+/**
+ * El nombre de perfil de WhatsApp a veces es un usuario ("garciacalvojhon", "juan_p23"): todo junto, sin
+ * mayúsculas y largo, o con números o signos. Saludar con eso suena a robot; se trata como desconocido.
+ */
+export function looksLikeHandle(name: string): boolean {
+  if (/\s/.test(name)) return false;
+  return /[\d_.@]/.test(name) || (name === name.toLowerCase() && name.length >= 13);
 }
 
 /** Agrega una nota con fecha a la memoria, sin repetir notas iguales y recortando las más viejas. */

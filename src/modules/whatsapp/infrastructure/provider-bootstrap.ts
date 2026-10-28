@@ -1,4 +1,5 @@
 import { IngestInboundMessageUseCase } from "@modules/conversations/application/ingest-inbound-message.use-case";
+import { flushPendingNotices } from "@modules/conversations/application/send-proactive";
 import { RespondToMessageUseCase } from "@modules/ai/application/respond-to-message.use-case";
 import { AdvisorAssistantUseCase, resolveAdvisor } from "@modules/ai/application/advisor-assistant.use-case";
 import { getAIProvider, getFastAIProvider } from "@modules/ai/infrastructure/provider-factory";
@@ -98,6 +99,11 @@ export function ensureWhatsAppWired(): void {
         // de nuevo: evita que la IA mande dos respuestas al cliente.
         return;
       }
+      // El cliente escribió: se abre la ventana de 24 horas y salen los avisos que lo esperaban
+      // (antes de que responda el agente, para que los vea en la conversación)
+      await flushPendingNotices(wpp, msg.tenantId, conversationId).catch((err) =>
+        console.error("[avisos pendientes] error:", err),
+      );
       if (msg.type === "audio" && msg.media && !msg.text) {
         // Sin esperar: el webhook debe responder rápido; el agente responde cuando termine la transcripción
         void transcribeInboundAudio({
