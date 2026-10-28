@@ -3,7 +3,8 @@ import { speakableText, type VoiceProviderKind } from "../domain/voice-policy";
 import { encodeOggOpus, parseWav, pcmSeconds, type PcmAudio } from "./ogg-opus";
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd, transcriptionCostMicroUsd } from "./voice-pricing";
 import { resolveTtsModel } from "./voice-model-setting";
-import { elevenLabsApiKey } from "./elevenlabs-key";
+import { elevenLabsApiKey, findElevenLabsModel, resolveElevenLabsModel } from "./elevenlabs-key";
+import { toElevenLabsVoiceSettings, type ElevenLabsTuning } from "../domain/elevenlabs-tuning";
 
 /**
  * Voz con Gemini (incluida, con la misma clave del agente) y ElevenLabs (voces premium y clonadas).
@@ -18,7 +19,6 @@ const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
  * pasajero, se intenta con este antes de responder por texto.
  */
 const geminiTtsFallbackModel = (): string => process.env.GEMINI_TTS_FALLBACK_MODEL ?? "gemini-3.8-flash-tts";
-export const elevenLabsModel = (): string => process.env.ELEVENLABS_MODEL ?? "eleven_flash_v2_5";
 /** Modelo que escucha las notas de voz de los clientes. */
 export const transcribeModel = (): string => process.env.GEMINI_TRANSCRIBE_MODEL ?? "gemini-flash-lite-latest";
 
@@ -46,13 +46,17 @@ export interface SpeechInput {
   provider: VoiceProviderKind;
   voiceId: string;
   style?: string | null;
+  /** Solo ElevenLabs: velocidad, estabilidad, parecido y estilo; sin esto, los de la voz */
+  tuning?: ElevenLabsTuning | null;
   text: string;
 }
 
 export async function synthesizeSpeech(input: SpeechInput): Promise<SynthesizedVoice> {
   const text = speakableText(input.text);
   if (!text) throw new InfrastructureError("No hay texto para convertir en voz");
-  return input.provider === "ELEVENLABS" ? elevenLabsSpeech(input.voiceId, text) : geminiSpeech(input.voiceId, input.style, text);
+  return input.provider === "ELEVENLABS"
+    ? elevenLabsSpeech(input.voiceId, text, input.tuning ?? null)
+    : geminiSpeech(input.voiceId, input.style, text);
 }
 
 async function geminiSpeech(voiceName: string, style: string | null | undefined, text: string): Promise<SynthesizedVoice> {
@@ -127,16 +131,23 @@ async function geminiSpeechWith(
   };
 }
 
-async function elevenLabsSpeech(voiceId: string, text: string): Promise<SynthesizedVoice> {
+async function elevenLabsSpeech(voiceId: string, text: string, tuning: ElevenLabsTuning | null): Promise<SynthesizedVoice> {
   const apiKey = await elevenLabsApiKey();
   if (!apiKey) throw new InfrastructureError("La plataforma no tiene ElevenLabs activo");
-  const model = elevenLabsModel();
+  const model = await resolveElevenLabsModel();
+  // Forzar el idioma solo lo aceptan los modelos v2.5; a los demás se les deja detectarlo
+  const languageCode = findElevenLabsModel(model)?.languageCode ?? model.includes("v2_5");
   const res = await safeFetch(
     `${ELEVENLABS_BASE}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=pcm_24000`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "xi-api-key": apiKey },
-      body: JSON.stringify({ text, model_id: model, language_code: "es" }),
+      body: JSON.stringify({
+        text,
+        model_id: model,
+        ...(languageCode ? { language_code: "es" } : {}),
+        ...(tuning ? { voice_settings: toElevenLabsVoiceSettings(tuning) } : {}),
+      }),
     },
   );
   if (!res.ok) throw new InfrastructureError(`ElevenLabs no generó la voz: ${await elevenLabsError(res)}`);
@@ -148,7 +159,7 @@ async function elevenLabsSpeech(voiceId: string, text: string): Promise<Synthesi
     model,
     unitsIn: text.length,
     unitsOut: 0,
-    costMicroUsd: elevenLabsCostMicroUsd(text.length),
+    costMicroUsd: elevenLabsCostMicroUsd(text.length, model),
   };
 }
 

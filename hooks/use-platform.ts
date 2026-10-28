@@ -94,7 +94,9 @@ export function useSetElevenLabsSettings() {
           ? "Clave de ElevenLabs guardada"
           : input.removeKey
             ? "Clave de ElevenLabs borrada del panel"
-            : input.freeOnly !== undefined
+            : input.model
+              ? `Las notas de voz de ElevenLabs salen con ${data.models.find((m) => m.id === input.model)?.label ?? input.model}`
+              : input.freeOnly !== undefined
               ? input.freeOnly
                 ? "Los negocios solo ven las voces gratis de ElevenLabs"
                 : "Los negocios ven todas las voces de ElevenLabs"

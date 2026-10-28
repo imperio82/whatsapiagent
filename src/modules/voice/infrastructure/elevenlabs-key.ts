@@ -13,6 +13,32 @@ const KEY = "voice.elevenlabs.apiKey";
 const ENABLED = "voice.elevenlabs.enabled";
 /** "true": los negocios solo ven las voces que funcionan con el plan gratuito de ElevenLabs (las prediseñadas) */
 const FREE_ONLY = "voice.elevenlabs.freeOnly";
+const MODEL = "voice.elevenlabs.model";
+
+/** Modelos de ElevenLabs que se pueden elegir en /plataforma. creditsPerChar: lo que gasta cada carácter. */
+export const ELEVENLABS_MODELS = [
+  {
+    id: "eleven_flash_v2_5",
+    label: "Flash v2.5",
+    note: "El más rápido y barato. Buena voz en español.",
+    creditsPerChar: 0.5,
+    /** Acepta forzar el idioma ("es") */
+    languageCode: true,
+  },
+  {
+    id: "eleven_multilingual_v2",
+    label: "Multilingual v2",
+    note: "Más natural y conserva mejor los acentos. Gasta el doble y tarda un poco más.",
+    creditsPerChar: 1,
+    languageCode: false,
+  },
+] as const;
+
+export type ElevenLabsModelId = (typeof ELEVENLABS_MODELS)[number]["id"];
+
+export function findElevenLabsModel(id: string) {
+  return ELEVENLABS_MODELS.find((m) => m.id === id);
+}
 
 export interface ElevenLabsKeyStatus {
   /** De dónde sale la clave: del panel, de las variables de entorno o de ninguna parte */
@@ -20,6 +46,8 @@ export interface ElevenLabsKeyStatus {
   enabled: boolean;
   /** Solo se ofrecen las voces gratis (prediseñadas) */
   freeOnly: boolean;
+  /** Modelo con el que se generan las notas de voz */
+  model: string;
   /** Últimos 4 caracteres, para reconocerla sin mostrarla */
   last4: string | null;
 }
@@ -36,9 +64,14 @@ async function storedKey(): Promise<string | null> {
 }
 
 export async function elevenLabsKeyStatus(): Promise<ElevenLabsKeyStatus> {
-  const [stored, enabled, freeOnly] = await Promise.all([storedKey(), getPlatformSetting(ENABLED), elevenLabsFreeOnly()]);
+  const [stored, enabled, freeOnly, model] = await Promise.all([
+    storedKey(),
+    getPlatformSetting(ENABLED),
+    elevenLabsFreeOnly(),
+    resolveElevenLabsModel(),
+  ]);
   const key = stored ?? process.env.ELEVENLABS_API_KEY ?? null;
-  return { source: stored ? "panel" : key ? "env" : null, enabled: enabled !== "false", freeOnly, last4: key ? key.slice(-4) : null };
+  return { source: stored ? "panel" : key ? "env" : null, enabled: enabled !== "false", freeOnly, model, last4: key ? key.slice(-4) : null };
 }
 
 /** La clave con la que se llama a ElevenLabs; null si no hay o si está apagado desde /plataforma. */
@@ -57,6 +90,17 @@ export function clearElevenLabsKey(): Promise<void> {
 
 export function setElevenLabsEnabled(enabled: boolean): Promise<void> {
   return setPlatformSetting(ENABLED, enabled ? "true" : "false");
+}
+
+/** El modelo elegido en /plataforma, o ELEVENLABS_MODEL, o Flash v2.5. */
+export async function resolveElevenLabsModel(): Promise<string> {
+  const stored = await getPlatformSetting(MODEL);
+  if (stored && findElevenLabsModel(stored)) return stored;
+  return process.env.ELEVENLABS_MODEL ?? "eleven_flash_v2_5";
+}
+
+export function saveElevenLabsModel(id: ElevenLabsModelId): Promise<void> {
+  return setPlatformSetting(MODEL, id);
 }
 
 export async function elevenLabsFreeOnly(): Promise<boolean> {

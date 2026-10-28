@@ -1160,6 +1160,8 @@ model AgentVoice {
   textForData       Boolean        @default(true)
   // Manda siempre el texto debajo del audio
   alsoSendText      Boolean        @default(false)
+  // ElevenLabs: velocidad, estabilidad, parecido y estilo (src/modules/voice/domain/elevenlabs-tuning.ts); null = los de la voz
+  elevenLabsTuning  Json?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 

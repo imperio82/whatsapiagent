@@ -1,4 +1,5 @@
 import { prisma } from "@shared/infrastructure/prisma/client";
+import { tuningFrom, type ElevenLabsTuning } from "../domain/elevenlabs-tuning";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
 import type { VoicePolicy, VoiceProviderKind } from "../domain/voice-policy";
 import { synthesizeSpeech, transcribeAudio, type SynthesizedVoice } from "../infrastructure/speech";
@@ -14,6 +15,8 @@ export interface VoiceSettings extends VoicePolicy {
   voiceId: string;
   voiceName: string | null;
   style: string | null;
+  /** Solo ElevenLabs; null = los ajustes propios de la voz */
+  elevenLabsTuning: ElevenLabsTuning | null;
 }
 
 /** Sin configuración guardada el agente entiende las notas de voz, pero responde por texto. */
@@ -24,6 +27,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   voiceId: "Kore",
   voiceName: null,
   style: null,
+  elevenLabsTuning: null,
   mode: "MIRROR",
   rules: [],
   intents: [],
@@ -42,6 +46,7 @@ export async function loadVoiceSettings(tenantId: string): Promise<VoiceSettings
     voiceId: row.voiceId,
     voiceName: row.voiceName,
     style: row.style,
+    elevenLabsTuning: tuningFrom(row.elevenLabsTuning),
     mode: row.mode,
     rules: row.rules,
     intents: row.intents,
@@ -163,5 +168,11 @@ export async function transcribeInboundAudio(input: {
 
 /** Genera la nota de voz de una respuesta con la voz configurada del negocio. */
 export function synthesizeReply(settings: VoiceSettings, text: string): Promise<SynthesizedVoice> {
-  return synthesizeSpeech({ provider: settings.provider, voiceId: settings.voiceId, style: settings.style, text });
+  return synthesizeSpeech({
+    provider: settings.provider,
+    voiceId: settings.voiceId,
+    style: settings.style,
+    tuning: settings.elevenLabsTuning,
+    text,
+  });
 }
