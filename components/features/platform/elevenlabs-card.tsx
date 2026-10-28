@@ -134,6 +134,28 @@ export function ElevenLabsCard(): React.ReactElement {
           </div>
         </div>
 
+        {data.source && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <label htmlFor="elevenlabs-model" className="font-medium">
+              Modelo
+            </label>
+            <select
+              id="elevenlabs-model"
+              value={data.model}
+              disabled={save.isPending}
+              onChange={(e) => save.mutate({ model: e.target.value })}
+              className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+            >
+              {data.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} · {m.creditsPerChar === 1 ? "1 crédito" : `${m.creditsPerChar} créditos`} por carácter
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-muted-foreground">{data.models.find((m) => m.id === data.model)?.note}</span>
+          </div>
+        )}
+
         {active && (data.voicesError ? (
           <p className="text-xs text-destructive">No se pudieron leer las voces de la cuenta: {data.voicesError}</p>
         ) : (

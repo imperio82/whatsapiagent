@@ -18,10 +18,15 @@ export function geminiTtsCostMicroUsd(model: string, textTokens: number, audioTo
   return Math.round(textTokens * row[1] + audioTokens * row[2](now));
 }
 
-/** ElevenLabs se cobra por carácter: Flash v2.5 ~US$ 0,04 por cada 1.000 (ELEVENLABS_USD_PER_1K_CHARS). */
-export function elevenLabsCostMicroUsd(characters: number): number {
+/**
+ * ElevenLabs se cobra por carácter: Flash v2.5 ~US$ 0,04 por cada 1.000 (ELEVENLABS_USD_PER_1K_CHARS). Los
+ * modelos que no son v2.5 (Multilingual v2) gastan el doble de créditos por carácter.
+ */
+export function elevenLabsCostMicroUsd(characters: number, model = "eleven_flash_v2_5"): number {
   const per1k = Number(process.env.ELEVENLABS_USD_PER_1K_CHARS);
-  return Math.round(characters * (Number.isFinite(per1k) && per1k > 0 ? per1k : 0.04) * 1000);
+  const base = Number.isFinite(per1k) && per1k > 0 ? per1k : 0.04;
+  const factor = model.includes("v2_5") ? 1 : 2;
+  return Math.round(characters * base * factor * 1000);
 }
 
 /** Transcripción con Gemini: el audio de entrada vale más que el texto. USD por millón de tokens. */

@@ -17,6 +17,7 @@ import {
 } from "@hooks/use-voice";
 import type { VoiceOptionDto } from "@modules/voice/application/voice-settings.use-cases";
 import type { VoiceSettings } from "@modules/voice/application/voice-runtime";
+import { DEFAULT_TUNING, TUNING_LIMITS, TUNING_PRESETS, type ElevenLabsTuning } from "@modules/voice/domain/elevenlabs-tuning";
 import { cn } from "@lib/utils";
 
 const usd = new Intl.NumberFormat("es-CO", { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 });
@@ -188,6 +189,15 @@ export function AgentVoice({ embedded = false }: { embedded?: boolean }): React.
                     escuchar.
                   </p>
                 </div>
+              )}
+
+              {form.provider === "ELEVENLABS" && status.elevenLabsConfigured && (
+                <TuningPanel
+                  voiceId={form.voiceId}
+                  voiceName={form.voiceName}
+                  tuning={form.elevenLabsTuning}
+                  onChange={(tuning) => set("elevenLabsTuning", tuning)}
+                />
               )}
 
               {form.provider === "ELEVENLABS" && status.elevenLabsConfigured && !status.elevenLabsFreeOnly && <CloneVoice />}
@@ -507,6 +517,99 @@ function CloneVoice() {
       >
         {clone.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />} Clonar voz
       </Button>
+    </div>
+  );
+}
+
+const pct = (v: number) => `${Math.round(v * 100)} %`;
+
+/** Velocidad, estabilidad, parecido y estilo de la voz de ElevenLabs, con valores rápidos y prueba antes de guardar. */
+function TuningPanel({
+  voiceId,
+  voiceName,
+  tuning,
+  onChange,
+}: {
+  voiceId: string;
+  voiceName: string | null;
+  tuning: ElevenLabsTuning | null;
+  onChange: (tuning: ElevenLabsTuning | null) => void;
+}) {
+  const preview = usePreviewVoice();
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const current = tuning ?? DEFAULT_TUNING;
+  const update = (patch: Partial<ElevenLabsTuning>) => onChange({ ...current, ...patch });
+
+  async function listen() {
+    audio.current?.pause();
+    const result = await preview.mutateAsync({ provider: "ELEVENLABS", voiceId, elevenLabsTuning: tuning });
+    audio.current = new Audio(`data:audio/ogg;base64,${result.audio}`);
+    void audio.current.play();
+  }
+
+  const sliders: { key: "speed" | "stability" | "similarity" | "style"; label: string; hint: string; step: number; format: (v: number) => string }[] = [
+    { key: "speed", label: "Velocidad", hint: "Más lenta o más rápida", step: 0.01, format: (v) => `${v.toFixed(2)}×` },
+    { key: "stability", label: "Estabilidad", hint: "Baja: más expresiva y humana. Alta: más pareja", step: 0.05, format: pct },
+    { key: "similarity", label: "Parecido a la voz original", hint: "Alta conserva mejor el timbre y el acento", step: 0.05, format: pct },
+    { key: "style", label: "Exageración del estilo", hint: "Mejor bajo; alto puede sonar sobreactuado", step: 0.05, format: pct },
+  ];
+
+  return (
+    <div className="max-w-xl space-y-3 rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium">Cómo suena {voiceName ?? "la voz"}</span>
+        <div className="flex flex-wrap gap-1">
+          {Object.entries(TUNING_PRESETS).map(([key, preset]) => (
+            <Button key={key} type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => onChange(preset.tuning)}>
+              {preset.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {sliders.map((slider) => {
+        const limits = TUNING_LIMITS[slider.key];
+        return (
+          <div key={slider.key} className="space-y-1">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <label htmlFor={`tuning-${slider.key}`} className="font-medium">
+                {slider.label}
+              </label>
+              <span className="tabular-nums text-muted-foreground">{slider.format(current[slider.key])}</span>
+            </div>
+            <input
+              id={`tuning-${slider.key}`}
+              type="range"
+              min={limits.min}
+              max={limits.max}
+              step={slider.step}
+              value={current[slider.key]}
+              onChange={(e) => update({ [slider.key]: Number(e.target.value) })}
+              className="w-full accent-wa"
+            />
+            <p className="text-[11px] text-muted-foreground">{slider.hint}</p>
+          </div>
+        );
+      })}
+
+      <label className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium">Realzar la claridad de la voz</span>
+        <Switch checked={current.speakerBoost} onCheckedChange={(speakerBoost) => update({ speakerBoost })} />
+      </label>
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <Button type="button" size="sm" variant="outline" onClick={() => void listen()} disabled={preview.isPending}>
+          {preview.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Escuchar con estos ajustes
+        </Button>
+        {tuning && (
+          <Button type="button" size="sm" variant="ghost" onClick={() => onChange(null)}>
+            Usar los de la voz
+          </Button>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {tuning ? "Se aplican a las notas de voz cuando guardes los cambios." : "Sin ajustar: suena como la voz viene en ElevenLabs."}
+      </p>
     </div>
   );
 }

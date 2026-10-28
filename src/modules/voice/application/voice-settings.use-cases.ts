@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
+import { TUNING_LIMITS } from "../domain/elevenlabs-tuning";
 import { authorize } from "@shared/application/authorize";
 import { TenantContext } from "@shared/application/tenant-context";
 import { NotFoundError, ValidationError } from "@shared/domain/errors";
@@ -10,7 +12,6 @@ import {
   cloneElevenLabsVoice,
   deleteElevenLabsVoice,
   elevenLabsConfigured,
-  elevenLabsModel,
   geminiConfigured,
   listElevenLabsVoices,
   synthesizeSpeech,
@@ -19,7 +20,7 @@ import {
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd } from "../infrastructure/voice-pricing";
 import { resolveTtsModel } from "../infrastructure/voice-model-setting";
 import { loadVoiceSettings, logVoiceUsage, type VoiceSettings } from "./voice-runtime";
-import { elevenLabsFreeOnly, isFreeElevenLabsVoice } from "../infrastructure/elevenlabs-key";
+import { elevenLabsFreeOnly, isFreeElevenLabsVoice, resolveElevenLabsModel } from "../infrastructure/elevenlabs-key";
 import { saleValueUsd } from "@modules/billing/domain/plans";
 
 
@@ -83,7 +84,7 @@ export class GetVoiceSettingsUseCase {
       // A precio de venta, como el resto de lo que ve el negocio
       costPerNoteUsd: {
         GEMINI: saleValueUsd(geminiTtsCostMicroUsd((await resolveTtsModel()).modelName, 120, TYPICAL_SECONDS * 25) / 1_000_000),
-        ELEVENLABS: saleValueUsd(elevenLabsCostMicroUsd(TYPICAL_CHARS) / 1_000_000),
+        ELEVENLABS: saleValueUsd(elevenLabsCostMicroUsd(TYPICAL_CHARS, await resolveElevenLabsModel()) / 1_000_000),
       },
     };
   }
@@ -157,6 +158,15 @@ async function voiceOptions(tenantId: string): Promise<VoiceOptionDto[]> {
   return [...gemini, ...cloned, ...library];
 }
 
+/** Velocidad, estabilidad, parecido y estilo de una voz de ElevenLabs, en los rangos que acepta su API. */
+const tuningSchema = z.object({
+  speed: z.number().min(TUNING_LIMITS.speed.min).max(TUNING_LIMITS.speed.max),
+  stability: z.number().min(0).max(1),
+  similarity: z.number().min(0).max(1),
+  style: z.number().min(0).max(1),
+  speakerBoost: z.boolean(),
+});
+
 export const updateVoiceSettingsSchema = z.object({
   transcribeInbound: z.boolean(),
   enabled: z.boolean(),
@@ -170,6 +180,7 @@ export const updateVoiceSettingsSchema = z.object({
   maxSeconds: z.number().int().min(10).max(120),
   textForData: z.boolean(),
   alsoSendText: z.boolean(),
+  elevenLabsTuning: tuningSchema.nullable().optional(),
 });
 export type UpdateVoiceSettingsInput = z.infer<typeof updateVoiceSettingsSchema>;
 
@@ -181,7 +192,14 @@ export class UpdateVoiceSettingsUseCase {
     if (input.enabled && input.mode === "RULES" && input.rules.length === 0) {
       throw new ValidationError("Escribe al menos una regla de cuándo responder con voz, o elige otro modo");
     }
-    const data = { ...input, style: input.style || null, voiceName: input.voiceName || null };
+    const { elevenLabsTuning, ...rest } = input;
+    const data = {
+      ...rest,
+      style: input.style || null,
+      voiceName: input.voiceName || null,
+      // null borra los ajustes (vuelve a los de la voz); sin el campo, no se tocan
+      ...(elevenLabsTuning !== undefined ? { elevenLabsTuning: elevenLabsTuning ?? Prisma.JsonNull } : {}),
+    };
     await prisma.agentVoice.upsert({ where: { tenantId }, create: { tenantId, ...data }, update: data });
     return loadVoiceSettings(tenantId);
   }
@@ -203,6 +221,7 @@ export const previewVoiceSchema = z.object({
   provider: z.enum(["GEMINI", "ELEVENLABS"]),
   voiceId: z.string().trim().min(1).max(100),
   style: z.string().trim().max(200).nullable().optional(),
+  elevenLabsTuning: tuningSchema.nullable().optional(),
   text: z.string().trim().max(300).optional(),
 });
 export type PreviewVoiceInput = z.infer<typeof previewVoiceSchema>;
@@ -222,6 +241,7 @@ export class PreviewVoiceUseCase {
       provider: input.provider,
       voiceId: input.voiceId,
       style: input.style,
+      tuning: input.elevenLabsTuning ?? null,
       text: input.text || PREVIEW_TEXT,
     });
     await logVoiceUsage({
@@ -271,7 +291,7 @@ export class CloneVoiceUseCase {
       provider: "ELEVENLABS",
       voiceId: providerVoiceId,
       name,
-      description: `Voz clonada de tu negocio · ${elevenLabsModel()}`,
+      description: `Voz clonada de tu negocio · ${await resolveElevenLabsModel()}`,
       cloned: true,
       clonedId: clone.id,
     };
