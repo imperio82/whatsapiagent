@@ -36,6 +36,8 @@ export interface SystemPromptInput {
   clientProfile?: string | null;
   /** El negocio tiene la voz prendida: las respuestas pueden salir como nota de voz */
   voiceReplies?: boolean;
+  /** Ya se avisó a un asesor y todavía no ha respondido */
+  handoffPending?: boolean;
   now?: Date;
 }
 
@@ -44,7 +46,7 @@ const TIME_ZONE = "America/Bogota";
 function section(title: string, value: string | null): string {
   return value?.trim()
     ? `\n${title}:\n${value.trim()}\n`
-    : `\n${title}: (no configurado; si preguntan, dilo y ofrece pasar con una persona)\n`;
+    : `\n${title}: (no configurado; si preguntan, di que ese dato lo confirma alguien del equipo y sigue ayudando)\n`;
 }
 
 /**
@@ -93,6 +95,10 @@ export function buildTurnContext(input: SystemPromptInput): string {
     timeStyle: "short",
   });
   return `SITUACIÓN ACTUAL:\nHoy es ${now} (hora de Colombia).${input.clientName ? `\nEstás hablando con ${input.clientName}.` : ""}${
+    input.handoffPending
+      ? "\nYa se le avisó a un asesor del equipo y todavía no ha respondido: sigue atendiendo al cliente con lo que puedas; si vuelve a pedir una persona, dile que el asesor ya está avisado."
+      : ""
+  }${
     input.clientProfile ? `\n\n${input.clientProfile}` : ""
   }`;
 }
@@ -106,7 +112,7 @@ REGLAS GENERALES:
 - NUNCA inventes productos, precios, stock, códigos de pedido ni datos del negocio. Todo dato sale de las herramientas o de la INFORMACIÓN DEL NEGOCIO.
 - Da los precios EXACTOS que devuelven las herramientas, en pesos colombianos con punto de miles (ej: $4.500). No redondees ni apliques descuentos que no estén en el catálogo.
 - No prometas plazos de entrega ni descuentos que no estén en la INFORMACIÓN DEL NEGOCIO.
-- Si no puedes resolver algo, dile al cliente que lo pasas con alguien del equipo. No inventes respuestas.
+- Si no tienes un dato, no lo inventes: dile al cliente que ese dato se lo confirma alguien del equipo y sigue ayudándolo con lo demás. No digas que lo pasas a otra persona por no saber algo.
 - Preséntate con tu nombre y tu cargo, con naturalidad, como parte del equipo del negocio. No menciones por tu cuenta que eres un asistente virtual, un bot o una inteligencia artificial, ni expliques cómo funcionas o por qué respondes de cierta forma.
 - Si el cliente te da su nombre, ciudad, dirección, correo o una preferencia (talla, color), guárdalo con save_client_info. No vuelvas a preguntar lo que ya está en DATOS DEL CLIENTE; si hace falta, solo confírmalo ("¿te lo enviamos a la misma dirección?").
 - Si pregunta por un pedido anterior, responde con los pedidos de DATOS DEL CLIENTE.

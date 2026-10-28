@@ -1,4 +1,5 @@
 import { authorize } from "@shared/application/authorize";
+import { humanTakeoverUntil } from "../domain/human-takeover";
 import { TenantContext } from "@shared/application/tenant-context";
 import { NotFoundError, ValidationError } from "@shared/domain/errors";
 import type { UseCase } from "@shared/domain/use-case";
@@ -66,8 +67,10 @@ export class SendMessageUseCase implements UseCase<SendMessageInput, SendMessage
         data: {
           lastMessageAt: result.sentAt,
           unreadCount: 0,
-          // Responder a mano cuenta como atender: se apaga la alerta de "pide una persona".
+          // Responder a mano cuenta como atender: se apaga la alerta de "pide una persona" y el asesor
+          // toma la conversación, así que el agente deja de responder un rato para no hablar encima
           ...(conv.status === "PENDING_REVIEW" ? { status: "OPEN" as const } : {}),
+          aiPausedUntil: humanTakeoverUntil(),
         },
       });
     } catch (err) {

@@ -45,7 +45,7 @@ const RETAIL: GraphProfile = {
 - "pedido": el cliente confirma que quiere comprar o pide cantidades concretas para que se las manden ("sí, mándame 2", "lo llevo", "quiero 10 de arroz").
 - "info": horario, envíos o domicilios, medios de pago, dirección, cambios, garantías, el estado de un pedido anterior u otras políticas.
 - "humano": pide hablar con una persona, está molesto o se queja, o el tema no tiene que ver con el negocio.
-Si dudas entre ventas y otra, elige "ventas".`,
+Si dudas entre ventas y otra, elige "ventas". Una pregunta sobre el negocio o sus productos que el agente quizá no sepa responder NO es "humano": la atiende el especialista.`,
   routerExceptions: IDENTITY_EXCEPTION.replace("el agente se presenta", "es \"ventas\": el agente se presenta"),
   specialists: {
     ventas: {
@@ -70,7 +70,7 @@ Si dudas entre ventas y otra, elige "ventas".`,
     info: {
       tools: ["get_business_info", "search_table", "add_table_row", "update_table_row", "save_client_info", "save_special_date"],
       rules: `ERES EL AGENTE DE INFORMACIÓN. Respondes sobre horario, envíos, medios de pago, dirección y políticas.
-- Usa solo la INFORMACIÓN DEL NEGOCIO (o get_business_info) y las TABLAS DE INFORMACIÓN (con search_table). Si el dato no está, dilo y ofrece pasar con una persona.
+- Usa solo la INFORMACIÓN DEL NEGOCIO (o get_business_info) y las TABLAS DE INFORMACIÓN (con search_table). Si el dato no está, di que ese dato lo confirma alguien del equipo y sigue ayudando.
 - Si además pregunta por productos o precios, dile que con gusto le ayudas a buscarlos; no des precios de productos tú.`,
     },
   },
@@ -88,7 +88,7 @@ const BROKERAGE: GraphProfile = {
 - "vendedor": quiere vender, consignar o arrendar SU vehículo o inmueble a través del negocio, o está dando los datos de ese bien.
 - "info": horario, dirección, cómo trabaja el negocio, formas de pago en general u otras políticas.
 - "humano": pide hablar con una persona del negocio, está molesto o se queja, o el tema no tiene que ver con el negocio.
-Si dudas, elige "comprador".`,
+Si dudas, elige "comprador". Una pregunta sobre el negocio o un bien que el agente quizá no sepa responder NO es "humano": la atiende el especialista.`,
   routerExceptions: `IMPORTANTE: pedir el teléfono, el nombre o la dirección del DUEÑO o PROPIETARIO de un bien, o querer "hablar directo con el dueño", NO es "humano": es "comprador". El agente de compradores le explica que todo se coordina con un asesor y sigue atendiéndolo.
 ${IDENTITY_EXCEPTION.replace("el agente se presenta", "es \"comprador\": el agente se presenta")}`,
   specialists: {
@@ -119,7 +119,7 @@ ${IDENTITY_EXCEPTION.replace("el agente se presenta", "es \"comprador\": el agen
     info: {
       tools: ["get_business_info", "search_table", "add_table_row", "update_table_row", "save_client_info", "save_special_date"],
       rules: `ERES EL AGENTE DE INFORMACIÓN. Respondes sobre horario, dirección, cómo trabaja el negocio, formas de pago y financiación.
-- Usa solo la INFORMACIÓN DEL NEGOCIO (o get_business_info), las REGLAS DEL NEGOCIO y las TABLAS DE INFORMACIÓN (con search_table). Si el dato no está, dilo y ofrece pasar con un asesor.
+- Usa solo la INFORMACIÓN DEL NEGOCIO (o get_business_info), las REGLAS DEL NEGOCIO y las TABLAS DE INFORMACIÓN (con search_table). Si el dato no está, di que ese dato lo confirma un asesor y sigue ayudando.
 - Si pregunta por un bien o un precio, dile que con gusto le ayudas a buscarlo; no des precios tú.`,
     },
   },

@@ -275,6 +275,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
       clientProfile: [clientProfile, qualification].filter(Boolean).join("\n\n") || null,
       voiceReplies: voicePolicy.enabled,
+      handoffPending: conversation.status === "PENDING_REVIEW",
     };
 
     const toolContext = {
@@ -314,6 +315,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           profile: GRAPH_PROFILES[profile],
           handoffRules: rules.filter((r) => r.category === "HANDOFF").map((r) => r.content),
           handoffMessage: tenant.aiHandoffMessage,
+          handoffPending: conversation.status === "PENDING_REVIEW",
           voice: { policy: voicePolicy, clientSentAudio },
         });
         result = { ...graph };
@@ -395,8 +397,11 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
         ...(result.handoff
           ? {
               status: "PENDING_REVIEW",
-              // Si fue el verificador, el equipo queda avisado pero el agente sigue respondiendo lo que sí puede
-              ...(result.handoffReason === "verificacion" ? {} : { aiPausedUntil: new Date(Date.now() + HANDOFF_PAUSE_MS) }),
+              // El equipo queda avisado (conversación en rojo). El agente sigue respondiendo hasta que un asesor escriba,
+              // salvo que el negocio elija pausarlo (Permisos del agente) y no haya sido por el verificador
+              ...(tenant.aiPauseOnHandoff && result.handoffReason !== "verificacion"
+                ? { aiPausedUntil: new Date(Date.now() + HANDOFF_PAUSE_MS) }
+                : {}),
             }
           : {}),
       },

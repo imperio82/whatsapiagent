@@ -1,4 +1,5 @@
 import { authorize } from "@shared/application/authorize";
+import { humanTakeoverUntil } from "../domain/human-takeover";
 import { TenantContext } from "@shared/application/tenant-context";
 import { NotFoundError } from "@shared/domain/errors";
 import type { UseCase } from "@shared/domain/use-case";
@@ -42,7 +43,8 @@ export class ConversationActionUseCase
         case "resume-ai":
           return { status: "OPEN" as const, aiPausedUntil: null };
         case "attend":
-          return { status: conv.status === "PENDING_REVIEW" ? ("OPEN" as const) : conv.status };
+          // El asesor toma la conversación: el agente deja de responder un rato
+          return { status: conv.status === "PENDING_REVIEW" ? ("OPEN" as const) : conv.status, aiPausedUntil: humanTakeoverUntil() };
         case "archive":
           return { status: "ARCHIVED" as const };
         case "unarchive":
