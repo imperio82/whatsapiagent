@@ -12,6 +12,12 @@ async function upload<T>(method: "POST" | "PUT", path: string, file: File, field
   return json.data;
 }
 
+/** Un campo de la nueva estructura: `from` es el campo de donde salen sus datos; sin él, un campo nuevo. */
+export interface ColumnChange {
+  from?: string | null;
+  name: string;
+}
+
 export interface CollectionMeta {
   name: string;
   description?: string | null;
@@ -28,6 +34,9 @@ export const collectionsService = {
       description: meta.description,
       aiEnabled: meta.aiEnabled === false ? "false" : "true",
     }),
+  createBlank: (meta: CollectionMeta, columns: string[], rows: Record<string, string>[]) =>
+    api.post<CollectionDto>("/api/v1/collections", { ...meta, columns, rows }),
+  updateColumns: (id: string, columns: ColumnChange[]) => api.put<CollectionDto>(`/api/v1/collections/${id}/columns`, { columns }),
   replaceData: (id: string, file: File) => upload<CollectionDto>("PUT", `/api/v1/collections/${id}/data`, file, {}),
   update: (id: string, input: Partial<CollectionMeta>) => api.patch<CollectionDto>(`/api/v1/collections/${id}`, input),
   remove: (id: string) => api.delete<void>(`/api/v1/collections/${id}`),

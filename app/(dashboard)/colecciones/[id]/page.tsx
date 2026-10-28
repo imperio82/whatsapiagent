@@ -27,6 +27,7 @@ import { Switch } from "@components/ui/switch";
 import { ListingForm } from "@components/features/listings/listing-form";
 import { announceMatches } from "@components/features/listings/announce-matches";
 import { ProductForm } from "@components/features/products/product-form";
+import { FieldsEditor, fieldsProblem, newField, type FieldDraft } from "@components/features/collections/fields-editor";
 import {
   useCollectionRows,
   useDeleteCollection,
@@ -34,6 +35,7 @@ import {
   useReplaceCollectionData,
   useSaveCollectionRow,
   useUpdateCollection,
+  useUpdateCollectionColumns,
 } from "@hooks/use-collections";
 import { useCreateListing, useListing, useUpdateListing } from "@hooks/use-listings";
 import { useCreateProduct, useDeleteProduct, useProduct, useUpdateProduct } from "@hooks/use-products";
@@ -199,11 +201,11 @@ export default function CollectionPage(): React.ReactElement {
       )}
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Configuración de {collection.name}</DialogTitle>
             <DialogDescription>
-              {collection.system ? "Esta tabla se arma con tus datos; cada fila se edita desde aquí." : "Nombre, acceso del agente y datos de la tabla."}
+              {collection.system ? "Esta tabla se arma con tus datos; cada fila se edita desde aquí." : "Nombre, acceso del agente, campos y datos de la tabla."}
             </DialogDescription>
           </DialogHeader>
           {collection.system ? <SystemSettings collection={collection} /> : <TableSettings collection={collection} />}
@@ -555,6 +557,8 @@ function TableSettings({ collection }: { collection: CollectionDto }) {
         </Button>
       </div>
 
+      <TableFields collection={collection} />
+
       <div className="space-y-2 border-t border-border pt-3">
         <div className="text-sm font-medium">Reemplazar los datos</div>
         <p className="text-xs text-muted-foreground">
@@ -600,6 +604,74 @@ function TableSettings({ collection }: { collection: CollectionDto }) {
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Agregar, renombrar, ordenar o quitar campos sin volver a subir la tabla. */
+function TableFields({ collection }: { collection: CollectionDto }) {
+  const save = useUpdateCollectionColumns();
+  const initial = () => collection.columns.map((c) => newField(c, c));
+  const [fields, setFields] = useState<FieldDraft[]>(initial);
+  const [confirming, setConfirming] = useState(false);
+
+  // Si la tabla cambia por fuera (otro archivo), se parte de sus campos nuevos
+  const columnsKey = collection.columns.join("\u0000");
+  useEffect(() => {
+    setFields(collection.columns.map((c) => newField(c, c)));
+    setConfirming(false);
+  }, [columnsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const changed =
+    fields.length !== collection.columns.length || fields.some((f, i) => f.from !== collection.columns[i] || f.name.trim() !== f.from);
+  const kept = new Set(fields.map((f) => f.from).filter(Boolean));
+  const removed = collection.columns.filter((c) => !kept.has(c));
+  const problem = fieldsProblem(fields);
+
+  const submit = () =>
+    save.mutate(
+      { id: collection.id, columns: fields.map((f) => ({ from: f.from, name: f.name.trim() })) },
+      { onSuccess: () => setConfirming(false) },
+    );
+
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <div className="text-sm font-medium">Campos</div>
+      <p className="text-xs text-muted-foreground">Las filas conservan sus datos al renombrar o mover un campo; los campos nuevos empiezan vacíos.</p>
+      <FieldsEditor fields={fields} onChange={setFields} />
+      {changed && problem && <p className="text-xs text-destructive">{problem}</p>}
+      {confirming ? (
+        <div className="space-y-2 rounded-md border border-destructive/40 p-2">
+          <p className="text-sm">
+            Se borran los datos de {removed.length === 1 ? "el campo" : "los campos"} {removed.map((c) => `"${c}"`).join(", ")} en todas
+            las filas. No se puede deshacer.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" variant="destructive" disabled={save.isPending} onClick={submit}>
+              Sí, guardar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        changed && (
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setFields(initial())}>
+              Deshacer
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              disabled={!!problem || save.isPending}
+              onClick={() => (removed.length > 0 && collection.rowCount > 0 ? setConfirming(true) : submit())}
+            >
+              {save.isPending ? "Guardando…" : "Guardar campos"}
+            </Button>
+          </div>
+        )
+      )}
     </div>
   );
 }

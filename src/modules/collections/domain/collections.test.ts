@@ -1,8 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  cleanColumns,
   collectionsCatalog,
+  manualRows,
   normalizeText,
+  planColumnChanges,
   prepareTable,
   rankRows,
   rowValuesFor,
@@ -68,5 +71,35 @@ describe("colecciones", () => {
     const { values, unknown } = rowValuesFor(["Nombre", "Teléfono", "Fecha"], { nombre: " Ana ", telefono: 3001234567, color: "rojo" });
     assert.deepEqual(values, { Nombre: "Ana", Teléfono: "3001234567" });
     assert.deepEqual(unknown, ["color"]);
+  });
+
+  it("limpia los campos de una tabla hecha a mano y no deja repetidos", () => {
+    assert.deepEqual(cleanColumns(["  Sede ", "Horario  de semana"]), ["Sede", "Horario de semana"]);
+    assert.throws(() => cleanColumns(["Sede", "sedé"]), /repetido/);
+    assert.throws(() => cleanColumns(["Sede", " "]), /nombre/);
+    assert.throws(() => cleanColumns([]), /nombre/);
+  });
+
+  it("renombra, agrega y quita campos conservando los datos", () => {
+    const plan = planColumnChanges(["Sede", "Horario", "Viejo"], [
+      { from: "Horario", name: "Horario semana" },
+      { from: "Sede", name: "Sede" },
+      { name: "Teléfono" },
+    ]);
+    assert.deepEqual(plan.columns, ["Horario semana", "Sede", "Teléfono"]);
+    assert.deepEqual(plan.removed, ["Viejo"]);
+    assert.deepEqual(plan.remap({ Sede: "Centro", Horario: "8 a 6", Viejo: "x" }), {
+      "Horario semana": "8 a 6",
+      Sede: "Centro",
+      Teléfono: "",
+    });
+    assert.throws(() => planColumnChanges(["Sede"], [{ from: "Otro", name: "Otro" }]), /no tiene/);
+    assert.throws(() => planColumnChanges(["Sede"], [{ from: "Sede", name: "A" }, { from: "Sede", name: "B" }]), /dos veces/);
+  });
+
+  it("guarda las filas escritas a mano sin las vacías", () => {
+    const rows = manualRows(["Sede", "Horario"], [{ sede: " Centro ", Horario: "8 a 6" }, { Sede: "", Horario: " " }]);
+    assert.deepEqual(rows, [{ Sede: "Centro", Horario: "8 a 6" }]);
+    assert.throws(() => manualRows(["Sede"], [{ Ciudad: "Pereira" }]), /no tiene/);
   });
 });

@@ -1,7 +1,11 @@
 import { ValidationError } from "@shared/domain/errors";
 import {
   AddCollectionRowUseCase,
+  CreateBlankCollectionUseCase,
   CreateCollectionUseCase,
+  UpdateCollectionColumnsUseCase,
+  blankCollectionSchema,
+  columnChangesSchema,
   DeleteCollectionRowUseCase,
   UpdateCollectionRowUseCase,
   rowValuesSchema,
@@ -33,6 +37,8 @@ export class CollectionsController {
   private readonly listUC = new ListCollectionsUseCase();
   private readonly rowsUC = new GetCollectionRowsUseCase();
   private readonly createUC = new CreateCollectionUseCase();
+  private readonly createBlankUC = new CreateBlankCollectionUseCase();
+  private readonly columnsUC = new UpdateCollectionColumnsUseCase();
   private readonly replaceUC = new ReplaceCollectionDataUseCase();
   private readonly updateUC = new UpdateCollectionUseCase();
   private readonly deleteUC = new DeleteCollectionUseCase();
@@ -56,6 +62,14 @@ export class CollectionsController {
       aiEnabled: form.get("aiEnabled") !== "false",
     });
     return this.createUC.execute(meta, file, sheetName);
+  }
+
+  createBlank(body: unknown): Promise<CollectionDto> {
+    return this.createBlankUC.execute(blankCollectionSchema.parse(body));
+  }
+
+  updateColumns(id: string, body: unknown): Promise<CollectionDto> {
+    return this.columnsUC.execute(id, columnChangesSchema.parse(body));
   }
 
   async replaceData(id: string, form: FormData): Promise<CollectionDto> {

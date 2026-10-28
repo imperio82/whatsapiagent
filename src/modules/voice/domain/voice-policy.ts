@@ -1,3 +1,5 @@
+import { spokenText } from "./spoken-text";
+
 /**
  * Cuándo responde el agente con nota de voz. Es código fijo (nodo "voz" del grafo, después del
  * verificador): la IA solo opina en el modo RULES, a través del router.
@@ -54,14 +56,9 @@ export function hasReadableData(text: string): boolean {
   );
 }
 
-/** Lo que se lee en voz alta: sin emojis, viñetas ni marcas de formato de WhatsApp. */
+/** Lo que se lee en voz alta: sin emojis ni formato, cada línea como frase y lo abreviado completo. */
 export function speakableText(text: string): string {
-  return text
-    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "")
-    .replace(/[*_~`]/g, "")
-    .replace(/^\s*[-•·]\s+/gm, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return spokenText(text);
 }
 
 export function decideVoiceReply(policy: VoicePolicy, turn: VoiceTurn): VoiceDecision {

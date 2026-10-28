@@ -7,7 +7,10 @@ import { readTabularFile } from "@modules/data-import/infrastructure/file-reader
 import type { TabularData } from "@modules/data-import/domain/tabular";
 import {
   COLLECTION_LIMITS,
+  cleanColumns,
+  manualRows,
   normalizeText,
+  planColumnChanges,
   prepareTable,
   rankRows,
   rowValuesFor,
@@ -302,32 +305,88 @@ export const collectionMetaSchema = z.object({
 });
 export type CollectionMetaInput = z.infer<typeof collectionMetaSchema>;
 
+/** Revisa que quepa otra tabla y que el nombre no esté usado. */
+async function assertNewTable(tenantId: string, name: string): Promise<void> {
+  const count = await prisma.collection.count({ where: { tenantId } });
+  if (count >= COLLECTION_LIMITS.perTenant) {
+    throw new ValidationError(`Puedes tener hasta ${COLLECTION_LIMITS.perTenant} tablas. Borra alguna que ya no uses.`);
+  }
+  if (await prisma.collection.findFirst({ where: { tenantId, name } })) {
+    throw new ConflictError(`Ya tienes una tabla llamada "${name}"`);
+  }
+}
+
+async function createTable(tenantId: string, meta: CollectionMetaInput, data: TabularData, sourceName: string | null) {
+  const collection = await prisma.collection.create({
+    data: {
+      tenantId,
+      name: meta.name,
+      description: meta.description || null,
+      aiEnabled: meta.aiEnabled ?? true,
+      columns: data.columns,
+      rowCount: data.rows.length,
+      sourceName,
+    },
+  });
+  if (data.rows.length > 0) await replaceRows(collection.id, data);
+  return toDto(collection);
+}
+
 export class CreateCollectionUseCase {
   async execute(meta: CollectionMetaInput, file: UploadedFile, sheetName?: string | null): Promise<CollectionDto> {
     authorize("tenant.settings");
     const { tenantId } = TenantContext.require();
-    const count = await prisma.collection.count({ where: { tenantId } });
-    if (count >= COLLECTION_LIMITS.perTenant) {
-      throw new ValidationError(`Puedes tener hasta ${COLLECTION_LIMITS.perTenant} tablas. Borra alguna que ya no uses.`);
-    }
-    if (await prisma.collection.findFirst({ where: { tenantId, name: meta.name } })) {
-      throw new ConflictError(`Ya tienes una tabla llamada "${meta.name}"`);
-    }
+    await assertNewTable(tenantId, meta.name);
     const read = await readCollectionFile(file, sheetName);
     const data = prepareTable(read);
-    const collection = await prisma.collection.create({
-      data: {
-        tenantId,
-        name: meta.name,
-        description: meta.description || null,
-        aiEnabled: meta.aiEnabled ?? true,
-        columns: data.columns,
-        rowCount: data.rows.length,
-        sourceName: read.sheetName ? `${file.name} · ${read.sheetName}` : file.name,
+    return createTable(tenantId, meta, data, read.sheetName ? `${file.name} · ${read.sheetName}` : file.name);
+  }
+}
+
+export const blankCollectionSchema = collectionMetaSchema.extend({
+  columns: z.array(z.string().max(200)).min(1, "Agrega al menos un campo").max(COLLECTION_LIMITS.columns),
+  rows: z.array(z.record(z.string(), z.string().max(COLLECTION_LIMITS.cellChars))).max(COLLECTION_LIMITS.rows).optional(),
+});
+export type BlankCollectionInput = z.infer<typeof blankCollectionSchema>;
+
+/** Una tabla hecha en el panel: sus campos y, si quiere, las primeras filas. */
+export class CreateBlankCollectionUseCase {
+  async execute(input: BlankCollectionInput): Promise<CollectionDto> {
+    authorize("tenant.settings");
+    const { tenantId } = TenantContext.require();
+    await assertNewTable(tenantId, input.name);
+    const columns = cleanColumns(input.columns);
+    const rows = manualRows(columns, input.rows ?? []);
+    return createTable(tenantId, input, { columns, rows }, null);
+  }
+}
+
+export const columnChangesSchema = z.object({
+  columns: z
+    .array(z.object({ from: z.string().nullable().optional(), name: z.string().max(200) }))
+    .min(1, "La tabla necesita al menos un campo")
+    .max(COLLECTION_LIMITS.columns),
+});
+export type ColumnChangesInput = z.infer<typeof columnChangesSchema>;
+
+/** Agrega, renombra, ordena o quita campos; las filas conservan sus datos (los de un campo quitado se borran). */
+export class UpdateCollectionColumnsUseCase {
+  async execute(id: string, input: ColumnChangesInput): Promise<CollectionDto> {
+    authorize("tenant.settings");
+    const collection = await ownTable(id);
+    const plan = planColumnChanges(collection.columns as string[], input.columns);
+    const updated = await prisma.$transaction(
+      async (tx) => {
+        const rows = await tx.collectionRow.findMany({ where: { collectionId: id }, select: { id: true, data: true } });
+        for (const row of rows) {
+          const data = plan.remap(row.data as Record<string, string>);
+          await tx.collectionRow.update({ where: { id: row.id }, data: { data, searchText: searchTextOf(data) } });
+        }
+        return tx.collection.update({ where: { id }, data: { columns: plan.columns } });
       },
-    });
-    await replaceRows(collection.id, data);
-    return toDto(collection);
+      { timeout: 60_000 },
+    );
+    return toDto(updated);
   }
 }
 

@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { collectionsService, type CollectionMeta } from "@services/collections.service";
+import { collectionsService, type CollectionMeta, type ColumnChange } from "@services/collections.service";
 import { ApiError } from "@services/api-client";
 
 const KEY = "collections";
@@ -30,6 +30,31 @@ export function useCreateCollection() {
     onSuccess: (c) => {
       qc.invalidateQueries({ queryKey: [KEY] });
       toast.success(`Tabla "${c.name}" creada con ${c.rowCount} filas`);
+    },
+    onError: showError,
+  });
+}
+
+export function useCreateBlankCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ meta, columns, rows }: { meta: CollectionMeta; columns: string[]; rows: Record<string, string>[] }) =>
+      collectionsService.createBlank(meta, columns, rows),
+    onSuccess: (c) => {
+      qc.invalidateQueries({ queryKey: [KEY] });
+      toast.success(`Tabla "${c.name}" creada`);
+    },
+    onError: showError,
+  });
+}
+
+export function useUpdateCollectionColumns() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, columns }: { id: string; columns: ColumnChange[] }) => collectionsService.updateColumns(id, columns),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [KEY] });
+      toast.success("Campos guardados");
     },
     onError: showError,
   });
