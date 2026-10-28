@@ -185,3 +185,60 @@ export function rowValuesFor(columns: string[], values: Record<string, unknown>)
   }
   return { values: result, unknown };
 }
+
+/** Nombre de un campo de una tabla creada a mano */
+export const COLUMN_NAME_MAX = 60;
+
+/** Los nombres de los campos, sin espacios de sobra; vacíos o repetidos (sin tildes ni mayúsculas) no valen. */
+export function cleanColumns(names: string[]): string[] {
+  const columns = names.map((n) => n.replace(/\s+/g, " ").trim());
+  if (columns.length === 0 || columns.some((c) => !c)) throw new ValidationError("Ponle nombre a cada campo");
+  if (columns.length > COLLECTION_LIMITS.columns) {
+    throw new ValidationError(`La tabla puede tener hasta ${COLLECTION_LIMITS.columns} campos`);
+  }
+  const long = columns.find((c) => c.length > COLUMN_NAME_MAX);
+  if (long) throw new ValidationError(`El campo "${long.slice(0, 20)}…" pasa de ${COLUMN_NAME_MAX} letras`);
+  const seen = new Set<string>();
+  for (const c of columns) {
+    const key = normalizeText(c);
+    if (seen.has(key)) throw new ValidationError(`El campo "${c}" está repetido`);
+    seen.add(key);
+  }
+  return columns;
+}
+
+/**
+ * Un campo de la nueva estructura: `from` es el campo de donde salen sus datos (el mismo, o el de antes si se
+ * renombró); sin `from` es un campo nuevo y empieza vacío. Los campos que no quedan se borran con sus datos.
+ */
+export interface ColumnChange {
+  from?: string | null;
+  name: string;
+}
+
+/** Las columnas nuevas y cómo pasar cada fila a esa estructura. */
+export function planColumnChanges(current: string[], changes: ColumnChange[]) {
+  const columns = cleanColumns(changes.map((c) => c.name));
+  const sources = changes.map((c) => c.from ?? null);
+  const unknown = sources.find((s) => s !== null && !current.includes(s));
+  if (unknown) throw new ValidationError(`La tabla no tiene el campo "${unknown}"`);
+  const used = sources.filter((s): s is string => s !== null);
+  if (new Set(used).size !== used.length) throw new ValidationError("Un campo no puede salir de otro dos veces");
+  return {
+    columns,
+    removed: current.filter((c) => !used.includes(c)),
+    remap: (row: Record<string, string>): Record<string, string> =>
+      Object.fromEntries(columns.map((c, i) => [c, sources[i] ? (row[sources[i]!] ?? "") : ""])),
+  };
+}
+
+/** Filas escritas a mano al crear la tabla: solo con los campos de la tabla y sin las que quedaron vacías. */
+export function manualRows(columns: string[], rows: Record<string, unknown>[]): Record<string, string>[] {
+  return rows
+    .map((r) => {
+      const parsed = rowValuesFor(columns, r);
+      if (parsed.unknown.length > 0) throw new ValidationError(`La tabla no tiene los campos: ${parsed.unknown.join(", ")}`);
+      return Object.fromEntries(columns.map((c) => [c, parsed.values[c] ?? ""]));
+    })
+    .filter((r) => Object.values(r).some(Boolean));
+}
