@@ -8,7 +8,7 @@ export default function LoginPage(): React.ReactElement {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Iniciar sesión</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Entrá a tu cuenta para gestionar tus ventas por WhatsApp.
+          Entra a tu cuenta para gestionar tus ventas por WhatsApp.
         </p>
       </div>
       {/* LoginForm lee la URL con useSearchParams: sin Suspense falla el build de producción */}
@@ -16,9 +16,9 @@ export default function LoginPage(): React.ReactElement {
         <LoginForm />
       </Suspense>
       <div className="mt-6 text-center text-sm text-muted-foreground">
-        ¿No tenés cuenta?{" "}
+        ¿No tienes cuenta?{" "}
         <Link href="/register" className="font-medium text-foreground hover:underline">
-          Registrá tu negocio
+          Registra tu negocio
         </Link>
       </div>
     </div>

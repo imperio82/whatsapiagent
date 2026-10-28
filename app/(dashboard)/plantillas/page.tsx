@@ -45,7 +45,7 @@ export default function TemplatesPage(): React.ReactElement {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Plantillas de mensajes</h1>
           <p className="text-sm text-muted-foreground">
-            Reusá textos frecuentes con variables como{" "}
+            Reutiliza textos frecuentes con variables como{" "}
             <code className="rounded bg-muted px-1 font-mono text-xs">{"{{cliente}}"}</code> o{" "}
             <code className="rounded bg-muted px-1 font-mono text-xs">{"{{total}}"}</code>.
           </p>

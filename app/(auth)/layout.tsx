@@ -25,13 +25,13 @@ export default function AuthLayout({
           <div className="text-sm uppercase tracking-[0.2em] text-white/50">CRM por WhatsApp</div>
           <div className="space-y-3">
             <div className="text-balance text-3xl font-semibold leading-tight">
-              Convertí cada chat en una venta.
+              Convierte cada chat en una venta.
               <br />
               <span className="text-wa">Sin perder seguimiento.</span>
             </div>
             <p className="max-w-md text-sm text-white/60">
-              Centralizá pedidos, leads y conversaciones. La IA responde al cliente con tu catálogo,
-              vos solo confirmás la venta.
+              Centraliza pedidos, leads y conversaciones. La IA responde al cliente con tu catálogo,
+              tú solo confirmas la venta.
             </p>
           </div>
           <div className="flex items-center gap-6 text-xs text-white/40">

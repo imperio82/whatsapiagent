@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { extractPhones, extractPrices, extractSpokenAmounts, verifyReply } from "./reply-verifier";
+import { extractFeatureClaims, extractPhones, extractPrices, extractSpokenAmounts, verifyReply } from "./reply-verifier";
 
 describe("extractPrices", () => {
   it("lee precios de tienda", () => {
@@ -76,5 +76,35 @@ describe("precios de las tablas de información", () => {
     const toolOutputs = [JSON.stringify({ ok: true, table: "Tarifas", rows: [{ servicio: "Avalúo", valor: "$350.000" }, { servicio: "Estudio de títulos", valor: "180000" }] })];
     assert.equal(verifyReply("El avalúo cuesta $350.000 y el estudio de títulos $180.000.", { toolOutputs, businessContext: "" }).ok, true);
     assert.equal(verifyReply("El avalúo cuesta $400.000.", { toolOutputs, businessContext: "" }).ok, false);
+  });
+});
+
+describe("características del inmueble", () => {
+  const ficha = JSON.stringify([
+    { code: "INV-0002", title: "Apartamento para estrenar en La Enea", priceCop: 285000000, details: "", photosCount: 0 },
+    { code: "INV-0007", title: "Apartamento en Álamos", priceCop: 2300000, details: "Habitaciones: 2, Baños: 2, Área: 68 m²" },
+  ]);
+
+  it("lee habitaciones, baños y área en los dos órdenes", () => {
+    assert.deepEqual(extractFeatureClaims("3 habitaciones, dos baños y 72 m²").sort(), ["banos:2", "habitaciones:3", "m2:72"]);
+    assert.deepEqual(extractFeatureClaims("Habitaciones: 2, Área: 68 m²").sort(), ["habitaciones:2", "m2:68"]);
+  });
+
+  it("bloquea habitaciones que no están en la ficha (caso C05)", () => {
+    const r = verifyReply("Apartamento para estrenar en La Enea, 3 habitaciones y parqueadero – $285.000.000", { toolOutputs: [ficha], businessContext: "" });
+    assert.equal(r.ok, false);
+    assert.match(r.problems.join(" "), /3 habitaciones/);
+  });
+
+  it("deja pasar lo que trae la ficha, lo que pidió el cliente o lo que ya se dijo", () => {
+    assert.equal(verifyReply("El de Álamos tiene 2 habitaciones y 68 m², a $2.300.000.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
+    assert.equal(verifyReply("Entiendo, busca 3 habitaciones. ¿En qué ciudad?", { toolOutputs: [], businessContext: "", clientText: "quiero 3 habitaciones" }).ok, true);
+    assert.equal(verifyReply("Sí, el de 2 alcobas.", { toolOutputs: [], businessContext: "", previousReplies: "Tiene 2 habitaciones" }).ok, true);
+  });
+
+  it("no afirma que acepta mascotas si la ficha no lo dice (caso C01)", () => {
+    assert.equal(verifyReply("Ese apartamento acepta mascotas.", { toolOutputs: [ficha], businessContext: "" }).ok, false);
+    assert.equal(verifyReply("Un asesor le confirma si acepta mascotas.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
+    assert.equal(verifyReply("No acepta mascotas.", { toolOutputs: [ficha], businessContext: "" }).ok, true);
   });
 });

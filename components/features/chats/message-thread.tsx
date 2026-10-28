@@ -46,7 +46,7 @@ export function MessageThread({ conversationId }: Props): React.ReactElement {
           <Sparkles className="h-6 w-6 text-muted-foreground" />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
-          Seleccioná una conversación para empezar a responder.
+          Selecciona una conversación para empezar a responder.
         </p>
       </div>
     );
@@ -234,7 +234,7 @@ export function MessageThread({ conversationId }: Props): React.ReactElement {
               (e.currentTarget.form as HTMLFormElement).requestSubmit();
             }
           }}
-          placeholder="Escribí un mensaje… (Enter para enviar)"
+          placeholder="Escribe un mensaje… (Enter para enviar)"
           className="max-h-32 flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <Button

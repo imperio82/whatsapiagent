@@ -54,7 +54,7 @@ export function OpenersDialog({ lead, onClose }: Props): React.ReactElement {
                 <DialogTitle>Abridores para {lead.contactName}</DialogTitle>
               </div>
               <DialogDescription>
-                Mensajes en frío generados por IA. Probá tonos y compará cuál convierte mejor.
+                Mensajes en frío generados por IA. Prueba tonos y compara cuál convierte mejor.
               </DialogDescription>
             </DialogHeader>
 
@@ -105,7 +105,7 @@ export function OpenersDialog({ lead, onClose }: Props): React.ReactElement {
                   <p className="py-4 text-center text-xs text-muted-foreground">Cargando…</p>
                 ) : (openers?.length ?? 0) === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">
-                    Todavía no hay abridores para este lead. Tocá <strong>Generar</strong> para crear 3 variantes con IA.
+                    Todavía no hay abridores para este lead. Toca <strong>Generar</strong> para crear 3 variantes con IA.
                   </p>
                 ) : (
                   openers?.map((o) => (

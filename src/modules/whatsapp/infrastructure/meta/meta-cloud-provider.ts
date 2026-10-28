@@ -25,7 +25,7 @@ async function graphFetch(url: string, init?: RequestInit): Promise<Response> {
   } catch (err) {
     console.error("[MetaCloudProvider] sin conexión con graph.facebook.com:", err);
     throw new InfrastructureError(
-      "No se pudo conectar con WhatsApp (Meta). Revisá la conexión a internet e intentá de nuevo.",
+      "No se pudo conectar con WhatsApp (Meta). Revisa la conexión a internet e intenta de nuevo.",
     );
   }
 }

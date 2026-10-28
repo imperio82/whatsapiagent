@@ -305,10 +305,10 @@ export class BaileysProvider implements WhatsAppProvider {
         kind === "error"
           ? ` Detalle: ${reason ?? "desconocido"}`
           : kind === "qr"
-            ? " Escaneá el QR primero en /configuracion/whatsapp."
+            ? " Escanea el QR primero en /configuracion/whatsapp."
             : kind === "connecting"
-              ? " La conexión está iniciando, esperá unos segundos."
-              : " Andá a /configuracion/whatsapp para vincular.";
+              ? " La conexión está iniciando, espera unos segundos."
+              : " Ve a /configuracion/whatsapp para vincular.";
       throw new InfrastructureError(
         `WhatsApp no está conectado (estado: ${kind}).${detail}`,
       );

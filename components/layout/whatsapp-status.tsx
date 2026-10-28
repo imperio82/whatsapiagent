@@ -70,7 +70,7 @@ export function WhatsAppStatus(): React.ReactElement {
               <QrCode className="h-4 w-4 text-amber-500" /> Esperando QR
             </div>
             <p className="text-xs text-muted-foreground">
-              Escaneá el código desde la página de configuración para vincular tu número.
+              Escanea el código desde la página de configuración para vincular tu número.
             </p>
             <Button asChild size="sm" className="mt-1 w-full" variant="wa">
               <Link href="/configuracion/whatsapp">Ver QR</Link>
@@ -96,7 +96,7 @@ export function WhatsAppStatus(): React.ReactElement {
               <XCircle className="h-4 w-4 text-zinc-400" /> Desconectado
             </div>
             <p className="text-xs text-muted-foreground">
-              Vinculá tu número de WhatsApp para recibir y enviar mensajes desde acá.
+              Vincula tu número de WhatsApp para recibir y enviar mensajes desde aquí.
             </p>
             <Button asChild size="sm" className="mt-1 w-full">
               <Link href="/configuracion/whatsapp">Vincular ahora</Link>

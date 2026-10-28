@@ -22,6 +22,8 @@ export interface GraphProfile {
   businessLabel: string;
   /** Aclaraciones que van al final del prompt del router, después de las reglas del negocio, para que pesen más. */
   routerExceptions?: string;
+  /** Lo que se le dice al cliente al pasar la conversación a una persona, con el trato del perfil. */
+  handoffMessage: string;
 }
 
 /**
@@ -34,6 +36,7 @@ const RETAIL: GraphProfile = {
   intents: ["ventas", "pedido", "info"],
   defaultIntent: "ventas",
   businessLabel: "Tienda",
+  handoffMessage: "Ya paso tu mensaje a alguien del equipo. En un momento te responden por aquí.",
   routerPrompt: `Clasifica el ÚLTIMO mensaje del cliente de una tienda que atiende por WhatsApp, teniendo en cuenta la conversación:
 - "ventas": saludos, preguntas por productos, precios, disponibilidad o recomendaciones.
 - "pedido": el cliente confirma que quiere comprar o pide cantidades concretas para que se las manden ("sí, mándame 2", "lo llevo", "quiero 10 de arroz").
@@ -74,6 +77,8 @@ const BROKERAGE: GraphProfile = {
   intents: ["comprador", "vendedor", "info"],
   defaultIntent: "comprador",
   businessLabel: "Negocio",
+  // En usted y sin emoji, como el resto del trato del perfil (antes tuteaba)
+  handoffMessage: "Le paso su mensaje a un asesor del equipo. Le responde por este mismo chat lo antes posible.",
   routerPrompt: `Clasifica el ÚLTIMO mensaje del cliente de un negocio que intermedia la compra, venta y arriendo de vehículos e inmuebles por WhatsApp, teniendo en cuenta la conversación:
 - "comprador": saludos; preguntas por vehículos o inmuebles, disponibilidad, precios, fotos, ubicación, financiación de un bien, visitas o pruebas de manejo; ofertas o pedidos de descuento; respuestas a preguntas de calificación (presupuesto, forma de pago, plazo). También si quiere dejar su carro en parte de pago de otro.
 - "vendedor": quiere vender, consignar o arrendar SU vehículo o inmueble a través del negocio, o está dando los datos de ese bien.
