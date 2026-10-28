@@ -175,6 +175,7 @@ export class AdvisorAssistantUseCase {
           profile: tenant.agentProfile,
           userId: advisor.userId,
           whatsapp: this.whatsapp,
+          ai: this.ai,
         }),
         maxToolSteps: MAX_TOOL_STEPS,
       });

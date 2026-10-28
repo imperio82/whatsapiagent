@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isGenericClientName } from "@modules/ai/domain/client-memory";
 import { confirmationMessage, needsConfirmationNotice } from "./confirmation";
 
 const at = new Date("2026-10-29T20:00:00Z"); // jueves 29 de octubre, 3:00 p. m. en Colombia
@@ -39,5 +40,20 @@ describe("confirmationMessage", () => {
     const text = confirmationMessage({ firstName: "", scheduledAt: at, listing: { title: "Mazda CX-5", kind: "VEHICLE" }, advisor: null, moved: true });
     assert.match(text, /^✅ Hola, su prueba de manejo del Mazda CX-5 cambió de hora y quedó confirmada/);
     assert.doesNotMatch(text, /Lo atiende/);
+  });
+
+  it("no deja dos puntos seguidos después de la hora", () => {
+    const text = confirmationMessage({ firstName: "Ana", scheduledAt: at, listing: null, advisor: null, moved: false });
+    assert.doesNotMatch(text, /\.\./);
+  });
+});
+
+describe("nombres de perfil de WhatsApp", () => {
+  it("un usuario todo junto no se usa para saludar", () => {
+    assert.equal(isGenericClientName("garciacalvojhonanderson"), true);
+    assert.equal(isGenericClientName("juan_p23"), true);
+    assert.equal(isGenericClientName("Jhon Anderson"), false);
+    assert.equal(isGenericClientName("Alejandra"), false);
+    assert.equal(isGenericClientName("Cliente 573001234567"), true);
   });
 });

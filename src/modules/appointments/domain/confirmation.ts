@@ -38,5 +38,7 @@ export function confirmationMessage(input: ConfirmationMessageInput): string {
   const greeting = input.firstName ? `Hola ${input.firstName}, ` : "Hola, ";
   const change = input.moved ? "cambió de hora y quedó confirmada" : "quedó confirmada";
   const advisor = input.advisor ? ` Lo atiende ${input.advisor.split(" ")[0]}.` : "";
-  return `✅ ${greeting}su ${what}${listing} ${change} para el ${fecha} a las ${hora}.${advisor} Si necesita cambiarla, escríbanos por aquí.`;
+  // "4:15 p. m." ya termina en punto: no se le agrega otro
+  const sentence = `su ${what}${listing} ${change} para el ${fecha} a las ${hora}`.replace(/\.$/, "");
+  return `✅ ${greeting}${sentence}.${advisor} Si necesita cambiarla, escríbanos por aquí.`;
 }

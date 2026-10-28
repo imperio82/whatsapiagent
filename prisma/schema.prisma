@@ -114,6 +114,7 @@ model Tenant {
   agentVoice        AgentVoice?
   clonedVoices      ClonedVoice[]
   voiceClips        VoiceClip[]
+  pendingNotices    PendingNotice[]
 
   @@map("tenants")
 }
@@ -401,6 +402,7 @@ model Client {
   relatedTo       ClientRelation[] @relation("ClientRelatedTo")
   greetings       Greeting[]
   reminders       Reminder[]
+  pendingNotices  PendingNotice[]
   // El cliente pidió no recibir felicitaciones ni mensajes de fechas especiales
   greetingsOptOut Boolean          @default(false)
 
@@ -1216,4 +1218,28 @@ model VoiceClip {
 
   @@index([tenantId, createdAt])
   @@map("voice_clips")
+}
+
+/// Aviso al cliente que no se pudo enviar porque pasaron las 24 horas de la ventana de WhatsApp (API oficial):
+/// sale apenas el cliente vuelva a escribir, salvo que ya haya vencido.
+model PendingNotice {
+  id        String    @id @default(cuid())
+  tenantId  String
+  clientId  String
+  text      String
+  /// De dónde salió: "cita", "coincidencia", "asesor"…
+  source    String
+  createdBy String?
+  /// Después de esta fecha ya no tiene sentido enviarlo (por ejemplo, la cita ya pasó)
+  expiresAt DateTime
+  sentAt    DateTime?
+  /// Por qué no salió (vencido, error de WhatsApp)
+  error     String?
+  createdAt DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clientId, sentAt])
+  @@map("pending_notices")
 }

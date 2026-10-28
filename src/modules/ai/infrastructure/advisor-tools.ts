@@ -1,11 +1,11 @@
 import type { AgentProfile, LeadStage, LeadTemperature, ListingStatus } from "@prisma/client";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
-import { sendProactiveMessage } from "@modules/conversations/application/send-proactive";
+import { deliverOrQueue } from "@modules/conversations/application/send-proactive";
 import { MatchingService } from "@modules/matching/application/matching.service";
 import { SchedulingService } from "@modules/integrations/application/scheduling.service";
 import { sendConfirmationNotice } from "@modules/appointments/application/confirmation-notice";
-import type { AITool } from "../domain/ports/ai-provider";
+import type { AIProvider, AITool } from "../domain/ports/ai-provider";
 import { appendMemory, isGenericClientName } from "../domain/client-memory";
 import { findListing, formatCop } from "./brokerage-tools";
 
@@ -23,6 +23,8 @@ export interface AdvisorToolContext {
   /** Usuario del asesor (null si escribe desde el número de avisos sin cuenta en el panel). */
   userId: string | null;
   whatsapp: WhatsAppProvider;
+  /** Para que el agente redacte los avisos al cliente (confirmación de citas) */
+  ai?: AIProvider;
 }
 
 const TIME_ZONE = "America/Bogota";
@@ -375,11 +377,20 @@ export function buildAdvisorTools(tenantId: string, ctx: AdvisorToolContext): AI
         if (args.confirmed !== true) {
           return json({ pendiente: "Muéstrale al asesor el texto y pregúntale si lo envías.", cliente: clientLabel(client), texto: body });
         }
+        let delivery;
         try {
-          await sendProactiveMessage(ctx.whatsapp, tenantId, client, body, ctx.userId);
+          delivery = await deliverOrQueue(ctx.whatsapp, tenantId, client, body, { userId: ctx.userId, source: "asesor" });
         } catch (err) {
           const detail = err instanceof Error ? err.message : "error desconocido";
-          return json({ error: `No se pudo enviar: ${detail}. Si el cliente no escribe hace más de 24 horas, WhatsApp solo permite plantillas aprobadas.` });
+          return json({ error: `No se pudo enviar: ${detail}` });
+        }
+        if (delivery.status === "queued") {
+          return json({
+            pendiente: true,
+            cliente: clientLabel(client),
+            motivo: delivery.reason,
+            queSigue: "El mensaje sale apenas el cliente vuelva a escribir (dentro de los próximos 7 días). Díselo al asesor.",
+          });
         }
         const conversation = await latestConversation(tenantId, client.id);
         if (conversation) {
@@ -476,6 +487,11 @@ export function buildAdvisorTools(tenantId: string, ctx: AdvisorToolContext): AI
           action: { type: "string", enum: ["confirm", "cancel", "done"] },
           scheduledAt: { type: "string", description: "Fecha y hora acordadas (obligatoria para confirmar si no la tenía)" },
           notes: { type: "string" },
+          clientMessageHints: {
+            type: "string",
+            description:
+              "Lo que el asesor pidió decirle al cliente en el aviso de confirmación (ej: que traiga la cédula). El aviso lo redacta el agente.",
+          },
         },
         required: ["client", "action"],
         additionalProperties: false,
@@ -510,7 +526,10 @@ export function buildAdvisorTools(tenantId: string, ctx: AdvisorToolContext): AI
           synced: false,
           error: err instanceof Error ? err.message : "error del calendario",
         }));
-        const notice = await sendConfirmationNotice(ctx.whatsapp, tenantId, appointment.id, appointment, ctx.userId);
+        const notice = await sendConfirmationNotice(ctx.whatsapp, tenantId, appointment.id, appointment, ctx.userId, {
+          ai: ctx.ai,
+          instructions: text(args.clientMessageHints),
+        });
         return json({
           ok: true,
           cliente: clientLabel(found.client),
@@ -520,7 +539,9 @@ export function buildAdvisorTools(tenantId: string, ctx: AdvisorToolContext): AI
           avisoAlCliente:
             notice.status === "sent"
               ? "ya se le envió la confirmación con el día y la hora; no se la repitas"
-              : notice.status === "failed"
+              : notice.status === "queued"
+                ? `queda pendiente: sale apenas el cliente vuelva a escribir (${notice.reason})`
+                : notice.status === "failed"
                 ? `no se pudo enviar (${notice.error}); ofrece avisarle con message_client`
                 : "no se envió aviso automático; avísale con message_client si hace falta",
         });

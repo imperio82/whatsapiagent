@@ -1,6 +1,8 @@
 import { prisma } from "@shared/infrastructure/prisma/client";
 import { NotFoundError, ValidationError } from "@shared/domain/errors";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
+import { clientWindow } from "@modules/conversations/application/send-proactive";
+import { windowClosedReason } from "@modules/conversations/domain/messaging-window";
 import { evaluateMatch, matchRulesFrom, suggestedMessage, type MatchListing } from "../domain/match";
 
 /**
@@ -161,6 +163,8 @@ export class MatchingService {
         for (const match of created) {
           const lead = candidates.find((c) => c.lead.id === match.leadId)!.lead;
           if (await this.recentlyAlerted(tenantId, lead.clientId!)) continue;
+          // Fuera de la ventana de 24 horas de WhatsApp no sale solo: queda para que el asesor decida
+          if (!(await clientWindow(this.whatsapp, tenantId, lead.clientId!)).open) continue;
           const result = await this.send(tenantId, match.id, { userId: null }).catch(() => null);
           if (result?.status === "SENT") sent += 1;
         }
@@ -228,6 +232,14 @@ export class MatchingService {
 
     const text = (opts.message ?? match.message).trim();
     if (!text) throw new ValidationError("El mensaje está vacío");
+
+    // Con la API oficial, pasadas 24 horas del último mensaje del cliente WhatsApp solo acepta plantillas
+    const window = await clientWindow(this.whatsapp, tenantId, client.id);
+    if (!window.open) {
+      const error = windowClosedReason(window.lastInboundAt);
+      await prisma.listingMatch.update({ where: { id: match.id }, data: { status: "FAILED", message: text, error, decidedBy: opts.userId } });
+      return { status: "FAILED", error };
+    }
 
     const conversation = await prisma.conversation.findFirst({
       where: { tenantId, clientId: client.id },
