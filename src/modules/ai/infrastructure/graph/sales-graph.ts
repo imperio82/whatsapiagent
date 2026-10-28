@@ -176,6 +176,8 @@ export async function runSalesGraph(input: {
   profile?: GraphProfile;
   /** Reglas del negocio sobre cuándo pasar a una persona (de la base de datos), para el router. */
   handoffRules?: string[];
+  /** Lo que se le dice al cliente al pasarlo a una persona (Mi agente); sin esto, el del perfil. */
+  handoffMessage?: string | null;
   /** Voz del agente: cuándo responder con nota de voz y si el cliente mandó una */
   voice?: { policy: VoicePolicy; clientSentAudio: boolean };
 }): Promise<GraphTurnResult> {
@@ -364,7 +366,7 @@ export async function runSalesGraph(input: {
   // ── humano: entrega a una persona del equipo ─────────────────────────────
   function humano(state: GraphState): Partial<GraphState> {
     return {
-      reply: profile.handoffMessage,
+      reply: input.handoffMessage?.trim() || profile.handoffMessage,
       handoff: true,
       handoffReason: state.intent === "humano" ? "cliente" : "verificacion",
       trace: [{

@@ -16,7 +16,12 @@ import {
   type AgentResource,
   type PermissionLevel,
 } from "@modules/ai/domain/agent-permissions";
+import { OFFER_POLICY_LABELS, type OfferPolicy } from "@modules/ai/domain/offer-policy";
+import { GRAPH_PROFILES } from "@modules/ai/infrastructure/graph/profiles";
 import { cn } from "@lib/utils";
+
+const TEXTAREA =
+  "w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 const rank = (level: PermissionLevel) => PERMISSION_LEVELS.indexOf(level);
 
@@ -30,16 +35,22 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
   const collections = (allCollections ?? []).filter((c) => !c.system);
   const updateCollection = useUpdateCollection();
   const [access, setAccess] = useState<Record<string, boolean>>({});
+  const [offerPolicy, setOfferPolicy] = useState<OfferPolicy | null>(null);
+  const [handoffMessage, setHandoffMessage] = useState("");
 
   useEffect(() => {
-    if (tenant) setPerms(agentPermissionsFrom(tenant.aiPermissions, tenant.agentProfile ?? "RETAIL"));
+    if (tenant) {
+      setPerms(agentPermissionsFrom(tenant.aiPermissions, tenant.agentProfile ?? "RETAIL"));
+      setOfferPolicy(tenant.aiOfferPolicy);
+      setHandoffMessage(tenant.aiHandoffMessage ?? "");
+    }
   }, [tenant]);
 
   useEffect(() => {
     if (allCollections) setAccess(Object.fromEntries(allCollections.filter((c) => !c.system).map((c) => [c.id, c.aiEnabled])));
   }, [allCollections]);
 
-  if (!tenant || !perms) return <div className="h-40 animate-pulse rounded-md bg-muted/50" />;
+  if (!tenant || !perms || !offerPolicy) return <div className="h-40 animate-pulse rounded-md bg-muted/50" />;
 
   const profile = tenant.agentProfile ?? "RETAIL";
   const resources = resourcesFor(profile);
@@ -53,7 +64,14 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
     }
     // Se conservan las áreas del otro perfil, por si el negocio cambia de tipo
     const own = Object.fromEntries(resources.map((r) => [r, perms![r]]));
-    update.mutate({ aiPermissions: { ...(tenant!.aiPermissions ?? {}), ...own } }, { onSuccess: onSaved });
+    update.mutate(
+      {
+        aiPermissions: { ...(tenant!.aiPermissions ?? {}), ...own },
+        aiOfferPolicy: offerPolicy!,
+        aiHandoffMessage: handoffMessage.trim() || null,
+      },
+      { onSuccess: onSaved },
+    );
   }
 
   return (
@@ -147,6 +165,61 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
             ))}
           </ul>
         )}
+      </div>
+
+      {profile === "BROKERAGE" && (
+        <div className="space-y-3 rounded-md border border-border p-4">
+          <span className="text-sm font-semibold">Ofertas del comprador</span>
+          {(
+            [
+              ["onReserved", "Si ofrece por un bien reservado"],
+              ["atOrAbovePrice", "Si ofrece el precio publicado o más"],
+            ] as const
+          ).map(([key, label]) => (
+            <div key={key} className="space-y-1.5">
+              <div className="text-xs text-muted-foreground">{label}</div>
+              <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
+                {(Object.entries(OFFER_POLICY_LABELS[key]) as [string, string][]).map(([value, text]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={offerPolicy[key] === value}
+                    onClick={() => setOfferPolicy({ ...offerPolicy, [key]: value } as OfferPolicy)}
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 text-left text-xs transition-colors",
+                      offerPolicy[key] === value ? "border-wa bg-wa/15 text-foreground" : "border-border text-muted-foreground hover:bg-accent/50",
+                    )}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="text-[11px] text-muted-foreground">
+            Nunca se registra un valor mayor al precio publicado. Una oferta menor al precio siempre se registra y pasa a un asesor.
+            Lo que el agente le dice al cliente en cada caso lo defines en las habilidades.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-2 rounded-md border border-border p-4">
+        <label htmlFor="handoff-message" className="text-sm font-semibold">
+          Mensaje al pasar a una persona
+        </label>
+        <textarea
+          id="handoff-message"
+          rows={2}
+          maxLength={300}
+          className={TEXTAREA}
+          value={handoffMessage}
+          placeholder={GRAPH_PROFILES[profile].handoffMessage}
+          onChange={(e) => setHandoffMessage(e.target.value)}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Lo que recibe el cliente cuando su conversación pasa a alguien del equipo. Vacío usa el texto de ejemplo.
+        </p>
       </div>
 
       <div className="flex justify-end">

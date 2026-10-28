@@ -20,6 +20,10 @@ export const updateTenantSchema = z.object({
   aiPermissions: z
     .record(z.enum(["catalog", "clients", "orders", "leads", "appointments"]), z.enum(["none", "read", "update", "write"]))
     .optional(),
+  aiHandoffMessage: z.string().trim().max(300).nullable().optional(),
+  aiOfferPolicy: z
+    .object({ onReserved: z.enum(["reject", "waitlist"]), atOrAbovePrice: z.enum(["close", "advisor"]) })
+    .optional(),
   aiReplyDelaySec: z.number().int().min(0).max(MAX_REPLY_DELAY_SEC).nullable().optional(),
   businessHours: z.string().max(500).nullable().optional(),
   deliveryInfo: z.string().max(2000).nullable().optional(),
@@ -47,7 +51,8 @@ export class UpdateTenantUseCase implements UseCase<UpdateTenantInput, CurrentTe
     const before = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { agentProfile: true } });
     const tenant = await prisma.tenant.update({
       where: { id: tenantId },
-      data: input,
+      // Un mensaje de traspaso vacío vuelve al del perfil
+      data: { ...input, ...(input.aiHandoffMessage !== undefined ? { aiHandoffMessage: input.aiHandoffMessage || null } : {}) },
     });
     // Cada perfil trae sus reglas por defecto (la tienda tutea; la intermediación protege datos del propietario…)
     if (input.agentProfile && before && before.agentProfile !== input.agentProfile) {

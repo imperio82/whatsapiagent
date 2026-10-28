@@ -6,6 +6,7 @@ import { isGenericClientName } from "../domain/client-memory";
 import { simulateLoan } from "../domain/financing";
 import { buildTools, ensureClientId, type ToolContext } from "./tools";
 import { SchedulingService } from "@modules/integrations/application/scheduling.service";
+import { DEFAULT_OFFER_POLICY, decideOffer, type OfferPolicy } from "../domain/offer-policy";
 
 /**
  * Herramientas del perfil de intermediación (vehículos e inmuebles). Igual que las de la
@@ -20,6 +21,8 @@ export interface BrokerageToolContext extends ToolContext {
   notifyOwner?: (text: string) => Promise<void>;
   /** Agenda sobre el calendario conectado (Google u otro). Por defecto, la del negocio. */
   scheduling?: SchedulingService;
+  /** Qué pasa con las ofertas (Mi agente → Permisos del agente). Por defecto, DEFAULT_OFFER_POLICY. */
+  offerPolicy?: OfferPolicy;
 }
 
 const MAX_INVENTORY_SCAN = 1000;
@@ -48,9 +51,6 @@ const STATUS_LABEL: Partial<Record<ListingRow["status"], string>> = {
   SOLD: "SOLD (ya se vendió)",
 };
 
-/** Sin fotos el modelo igual las ofrecía ("¿quiere ver fotos?"): se le dice en el mismo resultado. */
-const NO_PHOTOS = "Este bien no tiene fotos: no ofrezcas fotos. Si el cliente las pide, dile que un asesor se las envía.";
-
 /** Lo que el comprador puede saber del bien. Sin datos del propietario. */
 function publicListing(l: ListingRow, withPhotos: boolean) {
   // Sin el id interno: el agente se refiere a los bienes por nombre o código (findListing acepta ambos)
@@ -65,7 +65,8 @@ function publicListing(l: ListingRow, withPhotos: boolean) {
     details: attributesText(l.attributes),
     status: STATUS_LABEL[l.status] ?? "AVAILABLE",
     ...(withPhotos ? { description: l.description, photos: l.photos.slice(0, 5) } : { photosCount: l.photos.length }),
-    ...(l.photos.length === 0 ? { fotos: NO_PHOTOS } : {}),
+    // Dato explícito: sin él, el modelo ofrecía fotos de bienes que no tienen
+    sinFotos: l.photos.length === 0,
   };
 }
 
@@ -261,11 +262,7 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
         // Si pregunta por uno que ya se vendió ("¿todavía está el de Chipre?"), se le dice en vez de "no lo tengo"
         const sold = query ? await soldMatches(query, { kind, operation }) : [];
         if (sold.length > 0) {
-          return JSON.stringify({
-            resultados: found,
-            vendidos: sold,
-            nota: "Los de 'vendidos' ya se vendieron. Si el cliente preguntaba por uno de ellos, dile que ya se vendió y ofrécele los parecidos de 'resultados'.",
-          });
+          return JSON.stringify({ resultados: found, vendidos: sold });
         }
         if (found.length > 0) return JSON.stringify(found);
 
@@ -301,12 +298,7 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
         // También los vendidos: si pregunta por uno, se le dice que ya se vendió (no que no existe)
         const listing = await findListing(tenantId, args.listing, ["AVAILABLE", "RESERVED", "SOLD"]);
         if (!listing || !["AVAILABLE", "RESERVED", "SOLD"].includes(listing.status)) return LISTING_NOT_FOUND;
-        if (listing.status === "SOLD") {
-          return JSON.stringify({
-            ...publicListing(listing, false),
-            nota: "Este bien ya se vendió. Díselo al cliente y ofrécele parecidos con search_listings.",
-          });
-        }
+        if (listing.status === "SOLD") return JSON.stringify(publicListing(listing, false));
         return JSON.stringify(publicListing(listing, true));
       },
     },
@@ -611,66 +603,58 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
         const offered = amount(args.offerAmount);
         if (!offered) return JSON.stringify({ error: "valor_invalido", detalle: "El valor debe ser un número en pesos, por ejemplo 90000000." });
 
-        // Reservado o vendido: no se registra la oferta; se le ofrece avisarle si se libera
-        if (listing.status !== "AVAILABLE") {
-          const sold = listing.status === "SOLD";
-          return JSON.stringify({
-            ok: false,
-            error: sold ? "bien_vendido" : "bien_reservado",
-            mensaje: sold
-              ? "Este bien ya se vendió: no registres la oferta. Díselo y ofrécele parecidos con search_listings."
-              : "Este bien está reservado: no registres la oferta ni digas que la registraste. Dile que está reservado, ofrécele avisarle si se libera (guarda lo que busca con qualify_lead) y muéstrale parecidos con search_listings.",
-          });
+        // La política del negocio decide; la herramienta solo devuelve los hechos y las habilidades dicen qué responder
+        const price = Number(listing.priceCop);
+        const decision = decideOffer({ status: listing.status, priceCop: price }, offered, ctx.offerPolicy ?? DEFAULT_OFFER_POLICY);
+        const estado = listing.status === "SOLD" ? "vendido" : listing.status === "RESERVED" ? "reservado" : "disponible";
+        if (!decision.record) {
+          return JSON.stringify({ ok: false, registrada: false, estadoDelBien: decision.reason, precioPublicado: price });
         }
 
-        // Ofrecer el precio publicado o más es aceptar ese precio: nunca se cobra más de lo publicado
-        const price = Number(listing.priceCop);
-        const acceptsPrice = price > 0 && offered >= price;
-        const offer = acceptsPrice ? price : offered;
-
         const lead = await openLead(tenantId, client, "BUYER");
-        const repeated = lead.offerCop === BigInt(offer) && lead.listingId === listing.id && Date.now() - lead.updatedAt.getTime() < DEDUP_WINDOW_MS;
+        const repeated =
+          lead.offerCop === BigInt(decision.amount) && lead.listingId === listing.id && Date.now() - lead.updatedAt.getTime() < DEDUP_WINDOW_MS;
         const conditions = text(args.conditions);
+        const extra = conditions ? `, ${conditions}` : "";
         await prisma.lead.update({
           where: { id: lead.id },
           data: {
-            offerCop: BigInt(offer),
+            offerCop: BigInt(decision.amount),
             listingId: listing.id,
             productInterest: listing.title,
             stage: "READY_TO_BUY",
             temperature: "HOT",
-            aiSummary: acceptsPrice
-              ? `Acepta el precio publicado de ${formatCop(price)} por ${listing.title}${offered > price ? ` (ofreció ${formatCop(offered)})` : ""}${conditions ? `, ${conditions}` : ""}.`
-              : `Ofreció ${formatCop(offer)} por ${listing.title} (publicado en ${formatCop(listing.priceCop)})${conditions ? `, ${conditions}` : ""}.`,
+            aiSummary: decision.waitlist
+              ? `En lista de espera por ${listing.title} (reservado): ofrece ${formatCop(decision.amount)}${extra}.`
+              : decision.acceptsPrice
+                ? `Acepta el precio publicado de ${formatCop(price)} por ${listing.title}${offered > price ? ` (ofreció ${formatCop(offered)})` : ""}${extra}.`
+                : `Ofreció ${formatCop(decision.amount)} por ${listing.title} (publicado en ${formatCop(price)})${extra}.`,
             lastContactAt: new Date(),
           },
         });
 
-        if (acceptsPrice) {
-          // Sin traspaso: el agente sigue con el cierre (nombre y visita o separación) y el asesor ya queda avisado
-          if (!repeated) {
-            await notify(
-              `🔥 Cierre: ${clientLabel(client)} acepta el precio publicado de ${formatCop(price)} por ${listing.title} (${listing.code})${conditions ? `. Condiciones: ${conditions}` : ""}. El agente le propone visita o separación.`,
-            );
-          }
-          return JSON.stringify({
-            ok: true,
-            offerPrice: price,
-            aceptaPrecio: true,
-            mensaje: `El cliente ofreció ${formatCop(offered)} y el precio publicado es ${formatCop(price)}: queda registrado por ${formatCop(price)}. Dile que no tiene que pagar más del precio publicado, pídele su nombre completo si aún no lo tienes y proponle una visita (request_visit) o la separación del bien con un asesor.`,
-          });
-        }
-
         if (!repeated) {
+          const who = clientLabel(client);
+          const what = `${listing.title} (${listing.code})`;
           await notify(
-            `💰 Oferta: ${clientLabel(client)} ofrece ${formatCop(offer)} por ${listing.title} (${listing.code}), publicado en ${formatCop(listing.priceCop)}${conditions ? `. Condiciones: ${conditions}` : ""}. La conversación queda contigo.`,
+            decision.waitlist
+              ? `📋 Lista de espera: ${who} ofrece ${formatCop(decision.amount)} por ${what}, que está reservado. Avisarle si se libera.`
+              : decision.acceptsPrice
+                ? `🔥 ${who} acepta el precio publicado de ${formatCop(price)} por ${what}${conditions ? `. Condiciones: ${conditions}` : ""}.${decision.handoff ? " La conversación queda contigo." : ""}`
+                : `💰 Oferta: ${who} ofrece ${formatCop(decision.amount)} por ${what}, publicado en ${formatCop(price)}${conditions ? `. Condiciones: ${conditions}` : ""}. La conversación queda contigo.`,
           );
         }
         return JSON.stringify({
           ok: true,
-          offerPrice: offer,
-          handoff: true,
-          mensaje: "La oferta quedó registrada y pasa a un asesor. Díselo al cliente; no digas si se acepta.",
+          registrada: true,
+          estadoDelBien: estado,
+          precioPublicado: price,
+          montoOfrecido: offered,
+          montoRegistrado: decision.amount,
+          aceptaPrecioPublicado: decision.acceptsPrice,
+          listaDeEspera: decision.waitlist,
+          pasaAUnAsesor: decision.handoff,
+          ...(decision.handoff ? { handoff: true } : {}),
         });
       },
     },

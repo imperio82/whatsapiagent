@@ -35,6 +35,10 @@ model Tenant {
   // Permisos del agente por área { catalog, clients, orders, leads, appointments }: none, read, update o write.
   // Sin configurar = acceso completo (ver agent-permissions.ts)
   aiPermissions            Json?
+  // Lo que dice el agente al pasar la conversación a una persona; null = el texto por defecto del perfil
+  aiHandoffMessage         String?
+  // Qué pasa con las ofertas del comprador (src/modules/ai/domain/offer-policy.ts); null = por defecto
+  aiOfferPolicy            Json?
   // Tipo de agente: tienda (catálogo y pedidos) o intermediación (inventario de bienes, calificación y citas)
   agentProfile             AgentProfile   @default(RETAIL)
   // Número (solo dígitos, con indicativo) al que la IA avisa compradores calientes, ofertas, citas y bienes nuevos

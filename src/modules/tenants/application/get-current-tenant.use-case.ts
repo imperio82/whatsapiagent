@@ -3,6 +3,7 @@ import { TenantContext } from "@shared/application/tenant-context";
 import { prisma } from "@shared/infrastructure/prisma/client";
 import type { UseCase } from "@shared/domain/use-case";
 import type { AgentPermissions } from "@modules/ai/domain/agent-permissions";
+import { offerPolicyFrom, type OfferPolicy } from "@modules/ai/domain/offer-policy";
 
 export interface CurrentTenantDto {
   id: string;
@@ -21,6 +22,10 @@ export interface CurrentTenantDto {
   aiPersonality: string | null;
   /** Lo guardado; los permisos efectivos se calculan con agentPermissionsFrom según el perfil */
   aiPermissions: AgentPermissions | null;
+  /** null: el mensaje por defecto del perfil */
+  aiHandoffMessage: string | null;
+  /** Con los valores por defecto completados */
+  aiOfferPolicy: OfferPolicy;
   businessHours: string | null;
   deliveryInfo: string | null;
   paymentInfo: string | null;
@@ -31,10 +36,11 @@ export interface CurrentTenantDto {
   advisorAssistant: boolean;
 }
 
-type TenantRow = Omit<CurrentTenantDto, "aiAutoReply" | "aiAgentName" | "aiPermissions"> & {
+type TenantRow = Omit<CurrentTenantDto, "aiAutoReply" | "aiAgentName" | "aiPermissions" | "aiOfferPolicy"> & {
   aiAutoReply: boolean;
   aiAgentName: string | null;
   aiPermissions: unknown;
+  aiOfferPolicy: unknown;
 };
 
 export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
@@ -53,6 +59,8 @@ export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
     aiAgentRole: tenant.aiAgentRole,
     aiPersonality: tenant.aiPersonality,
     aiPermissions: (tenant.aiPermissions as AgentPermissions | null) ?? null,
+    aiHandoffMessage: tenant.aiHandoffMessage,
+    aiOfferPolicy: offerPolicyFrom(tenant.aiOfferPolicy),
     businessHours: tenant.businessHours,
     deliveryInfo: tenant.deliveryInfo,
     paymentInfo: tenant.paymentInfo,
