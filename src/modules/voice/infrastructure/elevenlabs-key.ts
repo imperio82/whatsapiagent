@@ -11,11 +11,15 @@ import {
  */
 const KEY = "voice.elevenlabs.apiKey";
 const ENABLED = "voice.elevenlabs.enabled";
+/** "true": los negocios solo ven las voces que funcionan con el plan gratuito de ElevenLabs (las prediseñadas) */
+const FREE_ONLY = "voice.elevenlabs.freeOnly";
 
 export interface ElevenLabsKeyStatus {
   /** De dónde sale la clave: del panel, de las variables de entorno o de ninguna parte */
   source: "panel" | "env" | null;
   enabled: boolean;
+  /** Solo se ofrecen las voces gratis (prediseñadas) */
+  freeOnly: boolean;
   /** Últimos 4 caracteres, para reconocerla sin mostrarla */
   last4: string | null;
 }
@@ -32,9 +36,9 @@ async function storedKey(): Promise<string | null> {
 }
 
 export async function elevenLabsKeyStatus(): Promise<ElevenLabsKeyStatus> {
-  const [stored, enabled] = await Promise.all([storedKey(), getPlatformSetting(ENABLED)]);
+  const [stored, enabled, freeOnly] = await Promise.all([storedKey(), getPlatformSetting(ENABLED), elevenLabsFreeOnly()]);
   const key = stored ?? process.env.ELEVENLABS_API_KEY ?? null;
-  return { source: stored ? "panel" : key ? "env" : null, enabled: enabled !== "false", last4: key ? key.slice(-4) : null };
+  return { source: stored ? "panel" : key ? "env" : null, enabled: enabled !== "false", freeOnly, last4: key ? key.slice(-4) : null };
 }
 
 /** La clave con la que se llama a ElevenLabs; null si no hay o si está apagado desde /plataforma. */
@@ -53,6 +57,22 @@ export function clearElevenLabsKey(): Promise<void> {
 
 export function setElevenLabsEnabled(enabled: boolean): Promise<void> {
   return setPlatformSetting(ENABLED, enabled ? "true" : "false");
+}
+
+export async function elevenLabsFreeOnly(): Promise<boolean> {
+  return (await getPlatformSetting(FREE_ONLY)) === "true";
+}
+
+export function setElevenLabsFreeOnly(freeOnly: boolean): Promise<void> {
+  return setPlatformSetting(FREE_ONLY, freeOnly ? "true" : "false");
+}
+
+/**
+ * Las voces que ElevenLabs deja usar por API en el plan gratuito: solo las prediseñadas. Las de la Voice
+ * Library, las diseñadas y las clonadas piden un plan pago o créditos.
+ */
+export function isFreeElevenLabsVoice(category: string): boolean {
+  return category === "premade";
 }
 
 /**

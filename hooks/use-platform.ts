@@ -94,9 +94,13 @@ export function useSetElevenLabsSettings() {
           ? "Clave de ElevenLabs guardada"
           : input.removeKey
             ? "Clave de ElevenLabs borrada del panel"
-            : data.enabled
-              ? "ElevenLabs activado para los negocios"
-              : "ElevenLabs desactivado: los negocios solo ven las voces de Gemini",
+            : input.freeOnly !== undefined
+              ? input.freeOnly
+                ? "Los negocios solo ven las voces gratis de ElevenLabs"
+                : "Los negocios ven todas las voces de ElevenLabs"
+              : data.enabled
+                ? "ElevenLabs activado para los negocios"
+                : "ElevenLabs desactivado: los negocios solo ven las voces de Gemini",
       );
     },
     onError,

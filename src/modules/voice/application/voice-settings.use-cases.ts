@@ -19,6 +19,7 @@ import {
 import { elevenLabsCostMicroUsd, geminiTtsCostMicroUsd } from "../infrastructure/voice-pricing";
 import { resolveTtsModel } from "../infrastructure/voice-model-setting";
 import { loadVoiceSettings, logVoiceUsage, type VoiceSettings } from "./voice-runtime";
+import { elevenLabsFreeOnly, isFreeElevenLabsVoice } from "../infrastructure/elevenlabs-key";
 import { saleValueUsd } from "@modules/billing/domain/plans";
 
 
@@ -48,6 +49,8 @@ export interface VoiceSettingsDto {
   status: {
     geminiConfigured: boolean;
     elevenLabsConfigured: boolean;
+    /** La plataforma solo ofrece las voces gratis de ElevenLabs: sin clonación */
+    elevenLabsFreeOnly: boolean;
     /** El proveedor de WhatsApp conectado puede enviar notas de voz */
     whatsappSendsVoice: boolean;
     whatsappProvider: string;
@@ -71,6 +74,7 @@ export class GetVoiceSettingsUseCase {
       status: {
         geminiConfigured: geminiConfigured(),
         elevenLabsConfigured: await elevenLabsConfigured(),
+        elevenLabsFreeOnly: await elevenLabsFreeOnly(),
         whatsappSendsVoice: sendsVoiceNotes(wpp),
         whatsappProvider: wpp.kind,
       },
@@ -119,18 +123,21 @@ async function voiceOptions(tenantId: string): Promise<VoiceOptionDto[]> {
   }));
   if (!(await elevenLabsConfigured())) return gemini;
 
-  const [account, clones, othersClones] = await Promise.all([
+  const [account, ownClones, othersClones, freeOnly] = await Promise.all([
     listElevenLabsVoices().catch((err) => {
       console.error("[voz] no se pudieron listar las voces de ElevenLabs:", err);
       return [];
     }),
     prisma.clonedVoice.findMany({ where: { tenantId }, orderBy: { createdAt: "desc" } }),
     prisma.clonedVoice.findMany({ where: { tenantId: { not: tenantId } }, select: { providerVoiceId: true } }),
+    elevenLabsFreeOnly(),
   ]);
+  // Con solo voces gratis, las clonadas tampoco se ofrecen: ElevenLabs las cobra
+  const clones = freeOnly ? [] : ownClones;
   // Las clonadas desde la app ya van arriba (las propias) o son de otro negocio
-  const hidden = new Set([...clones.map((c) => c.providerVoiceId), ...othersClones.map((c) => c.providerVoiceId)]);
+  const hidden = new Set([...ownClones.map((c) => c.providerVoiceId), ...othersClones.map((c) => c.providerVoiceId)]);
   const library: VoiceOptionDto[] = account
-    .filter((v) => !hidden.has(v.voiceId))
+    .filter((v) => !hidden.has(v.voiceId) && (!freeOnly || isFreeElevenLabsVoice(v.category)))
     .sort((a, b) => Number(speaksSpanish(b)) - Number(speaksSpanish(a)))
     .map((v) => ({
       provider: "ELEVENLABS",
@@ -240,6 +247,7 @@ export class CloneVoiceUseCase {
     authorize("tenant.settings");
     const { tenantId, userId } = TenantContext.require();
     if (!(await elevenLabsConfigured())) throw new ValidationError("ElevenLabs no está disponible en la plataforma");
+    if (await elevenLabsFreeOnly()) throw new ValidationError("La clonación de voz no está disponible en este momento");
     const name = input.name.trim();
     if (name.length < 2 || name.length > 60) throw new ValidationError("Ponle a la voz un nombre de 2 a 60 caracteres");
     if (!input.consent) {

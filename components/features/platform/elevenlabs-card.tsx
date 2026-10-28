@@ -9,6 +9,9 @@ import { Input } from "@components/ui/input";
 import { Label } from "@components/ui/label";
 import { Switch } from "@components/ui/switch";
 import { useElevenLabsSettings, useSetElevenLabsSettings } from "@hooks/use-platform";
+import type { ElevenLabsVoiceSummary } from "@modules/platform/application/elevenlabs.use-cases";
+
+const LANGUAGES: Record<string, string> = { es: "español", en: "inglés", pt: "portugués", fr: "francés", it: "italiano", de: "alemán" };
 
 /**
  * Voces premium y clonadas de ElevenLabs para todos los negocios. La clave se guarda cifrada y nunca vuelve
@@ -98,6 +101,7 @@ export function ElevenLabsCard(): React.ReactElement {
             </p>
           </div>
 
+          <div className="space-y-2">
           <label className="flex h-fit items-center justify-between gap-3 rounded-md border border-border p-3 text-sm">
             <span>
               <span className="font-medium">Ofrecer ElevenLabs a los negocios</span>
@@ -112,8 +116,75 @@ export function ElevenLabsCard(): React.ReactElement {
               aria-label="Ofrecer ElevenLabs a los negocios"
             />
           </label>
+          <label className="flex h-fit items-center justify-between gap-3 rounded-md border border-border p-3 text-sm">
+            <span>
+              <span className="font-medium">Mostrar solo las voces gratis</span>
+              <span className="block text-xs text-muted-foreground">
+                Para el plan gratuito de ElevenLabs: los negocios solo ven las prediseñadas y no pueden clonar voces. Las de la
+                Voice Library, las diseñadas y las clonadas piden plan pago o créditos.
+              </span>
+            </span>
+            <Switch
+              checked={data.freeOnly}
+              disabled={save.isPending}
+              onCheckedChange={(freeOnly) => save.mutate({ freeOnly })}
+              aria-label="Mostrar solo las voces gratis"
+            />
+          </label>
+          </div>
         </div>
+
+        {active && (data.voicesError ? (
+          <p className="text-xs text-destructive">No se pudieron leer las voces de la cuenta: {data.voicesError}</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            <VoiceList
+              title="Gratis"
+              hint="Funcionan con el plan gratuito"
+              voices={data.voices.filter((v) => v.free)}
+            />
+            <VoiceList
+              title="Requieren plan pago"
+              hint={data.freeOnly ? "Ocultas para los negocios" : "Visibles para los negocios; fallan sin plan pago o créditos"}
+              voices={data.voices.filter((v) => !v.free)}
+            />
+          </div>
+        ))}
       </CardContent>
     </Card>
+  );
+}
+
+function VoiceList({ title, hint, voices }: { title: string; hint: string; voices: ElevenLabsVoiceSummary[] }) {
+  return (
+    <div className="rounded-md border border-border">
+      <div className="flex items-baseline justify-between gap-2 border-b border-border px-3 py-2">
+        <span className="text-sm font-medium">
+          {title} <span className="text-muted-foreground">({voices.length})</span>
+        </span>
+        <span className="text-[11px] text-muted-foreground">{hint}</span>
+      </div>
+      {voices.length === 0 ? (
+        <p className="px-3 py-3 text-xs text-muted-foreground">Ninguna.</p>
+      ) : (
+        <ul className="max-h-56 divide-y divide-border overflow-y-auto text-xs">
+          {voices.map((v) => (
+            <li key={v.voiceId} className="flex items-center justify-between gap-2 px-3 py-1.5">
+              <span className="min-w-0 truncate">
+                <span className="font-medium">{v.name}</span>
+                <span className="text-muted-foreground">
+                  {[v.language ? (LANGUAGES[v.language.toLowerCase()] ?? v.language) : null, v.accent].filter(Boolean).length > 0
+                    ? ` · ${[v.language ? (LANGUAGES[v.language.toLowerCase()] ?? v.language) : null, v.accent].filter(Boolean).join(" · ")}`
+                    : ""}
+                </span>
+              </span>
+              {v.previewUrl && (
+                <audio controls preload="none" src={v.previewUrl} className="h-7 w-32 shrink-0" aria-label={`Escuchar ${v.name}`} />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
