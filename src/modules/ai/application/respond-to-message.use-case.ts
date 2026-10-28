@@ -250,7 +250,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
     // Voz del agente: solo si el proveedor de WhatsApp manda audios y la voz elegida está disponible
     const voice = await loadVoiceSettings(tenantId);
     const voiceAvailable =
-      sendsVoiceNotes(this.whatsapp) && (voice.provider === "ELEVENLABS" ? elevenLabsConfigured() : geminiConfigured());
+      sendsVoiceNotes(this.whatsapp) && (voice.provider === "ELEVENLABS" ? await elevenLabsConfigured() : geminiConfigured());
     const voicePolicy = { ...voice, enabled: voice.enabled && voiceAvailable };
     const clientSentAudio = last.type === "AUDIO";
 

@@ -27,6 +27,11 @@ GEMINI_TRANSCRIBE_MODEL="gemini-flash-lite-latest"
 GEMINI_TTS_MODEL="gemini-3.8-flash-lite-tts"
 GEMINI_TTS_FALLBACK_MODEL="gemini-3.8-flash-tts"
 
+# ElevenLabs (voces premium y clonadas): la clave se pone en /plataforma → Voces premium,
+# donde se guarda cifrada. ELEVENLABS_API_KEY solo es un respaldo si no hay clave en el panel.
+# ELEVENLABS_MODEL="eleven_flash_v2_5"
+# ELEVENLABS_USD_PER_1K_CHARS="0.04"
+
 
 == 3. DEJAR IGUAL ==
 

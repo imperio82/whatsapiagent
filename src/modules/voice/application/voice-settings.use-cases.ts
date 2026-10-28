@@ -69,7 +69,7 @@ export class GetVoiceSettingsUseCase {
       intents: [...GRAPH_PROFILES[tenant.agentProfile].intents],
       status: {
         geminiConfigured: geminiConfigured(),
-        elevenLabsConfigured: elevenLabsConfigured(),
+        elevenLabsConfigured: await elevenLabsConfigured(),
         whatsappSendsVoice: sendsVoiceNotes(wpp),
         whatsappProvider: wpp.kind,
       },
@@ -95,7 +95,7 @@ async function voiceOptions(tenantId: string): Promise<VoiceOptionDto[]> {
     name: v.id,
     description: `${v.tone} · ${v.gender}`,
   }));
-  if (!elevenLabsConfigured()) return gemini;
+  if (!(await elevenLabsConfigured())) return gemini;
 
   const [account, clones] = await Promise.all([
     listElevenLabsVoices().catch((err) => {
@@ -159,7 +159,7 @@ async function assertVoiceAllowed(tenantId: string, provider: "GEMINI" | "ELEVEN
     if (!GEMINI_VOICES.some((v) => v.id === voiceId)) throw new ValidationError("Esa voz de Gemini no existe");
     return;
   }
-  if (!elevenLabsConfigured()) throw new ValidationError("ElevenLabs no está disponible en la plataforma");
+  if (!(await elevenLabsConfigured())) throw new ValidationError("ElevenLabs no está disponible en la plataforma");
   const options = await voiceOptions(tenantId);
   if (!options.some((v) => v.provider === "ELEVENLABS" && v.voiceId === voiceId)) {
     throw new ValidationError("Esa voz de ElevenLabs no está disponible para tu negocio");
@@ -213,7 +213,7 @@ export class CloneVoiceUseCase {
   async execute(input: { name: string; consent: boolean; files: File[] }): Promise<VoiceOptionDto> {
     authorize("tenant.settings");
     const { tenantId, userId } = TenantContext.require();
-    if (!elevenLabsConfigured()) throw new ValidationError("ElevenLabs no está disponible en la plataforma");
+    if (!(await elevenLabsConfigured())) throw new ValidationError("ElevenLabs no está disponible en la plataforma");
     const name = input.name.trim();
     if (name.length < 2 || name.length > 60) throw new ValidationError("Ponle a la voz un nombre de 2 a 60 caracteres");
     if (!input.consent) {

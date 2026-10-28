@@ -29,6 +29,12 @@ import {
   type TrialSettingsDto,
 } from "../application/trial.use-cases";
 import {
+  GetElevenLabsSettingsUseCase,
+  SetElevenLabsSettingsUseCase,
+  setElevenLabsSchema,
+  type ElevenLabsSettingsDto,
+} from "../application/elevenlabs.use-cases";
+import {
   GetUsageLimitsUseCase,
   SetLimitsEnforcementUseCase,
   setEnforcementSchema,
@@ -55,6 +61,8 @@ export class PlatformController {
   private readonly setVoiceModelUC = new SetVoiceModelUseCase();
   private readonly getTrialUC = new GetTrialSettingsUseCase();
   private readonly setTrialUC = new SetTrialSettingsUseCase();
+  private readonly getElevenLabsUC = new GetElevenLabsSettingsUseCase();
+  private readonly setElevenLabsUC = new SetElevenLabsSettingsUseCase();
   private readonly limitsUC = new GetUsageLimitsUseCase();
   private readonly enforcementUC = new SetLimitsEnforcementUseCase();
   private readonly rechargesUC = new ListPlatformRechargesUseCase();
@@ -88,6 +96,15 @@ export class PlatformController {
   async setAgentModel(body: unknown): Promise<AgentModelDto> {
     await this.setModelUC.execute(setAgentModelSchema.parse(body));
     return this.getModelUC.execute();
+  }
+
+  elevenLabs(): Promise<ElevenLabsSettingsDto> {
+    return this.getElevenLabsUC.execute();
+  }
+
+  async setElevenLabs(body: unknown): Promise<ElevenLabsSettingsDto> {
+    await this.setElevenLabsUC.execute(setElevenLabsSchema.parse(body));
+    return this.getElevenLabsUC.execute();
   }
 
   trial(): Promise<TrialSettingsDto> {
