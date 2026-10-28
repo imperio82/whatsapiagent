@@ -21,6 +21,7 @@ export const updateTenantSchema = z.object({
     .record(z.enum(["catalog", "clients", "orders", "leads", "appointments"]), z.enum(["none", "read", "update", "write"]))
     .optional(),
   aiHandoffMessage: z.string().trim().max(300).nullable().optional(),
+  aiPauseOnHandoff: z.boolean().optional(),
   aiOfferPolicy: z
     .object({ onReserved: z.enum(["reject", "waitlist"]), atOrAbovePrice: z.enum(["close", "advisor"]) })
     .optional(),

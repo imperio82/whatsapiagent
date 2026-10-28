@@ -37,12 +37,14 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
   const [access, setAccess] = useState<Record<string, boolean>>({});
   const [offerPolicy, setOfferPolicy] = useState<OfferPolicy | null>(null);
   const [handoffMessage, setHandoffMessage] = useState("");
+  const [pauseOnHandoff, setPauseOnHandoff] = useState(false);
 
   useEffect(() => {
     if (tenant) {
       setPerms(agentPermissionsFrom(tenant.aiPermissions, tenant.agentProfile ?? "RETAIL"));
       setOfferPolicy(tenant.aiOfferPolicy);
       setHandoffMessage(tenant.aiHandoffMessage ?? "");
+      setPauseOnHandoff(tenant.aiPauseOnHandoff);
     }
   }, [tenant]);
 
@@ -69,6 +71,7 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
         aiPermissions: { ...(tenant!.aiPermissions ?? {}), ...own },
         aiOfferPolicy: offerPolicy!,
         aiHandoffMessage: handoffMessage.trim() || null,
+        aiPauseOnHandoff: pauseOnHandoff,
       },
       { onSuccess: onSaved },
     );
@@ -220,6 +223,35 @@ export function AgentPermissionsForm({ onSaved }: { onSaved?: () => void }): Rea
         <p className="text-[11px] text-muted-foreground">
           Lo que recibe el cliente cuando su conversación pasa a alguien del equipo. Vacío usa el texto de ejemplo.
         </p>
+        <div className="space-y-1.5 pt-1">
+          <div className="text-xs text-muted-foreground">Mientras el asesor responde</div>
+          <div role="radiogroup" aria-label="Mientras el asesor responde" className="flex flex-wrap gap-1">
+            {(
+              [
+                [false, "El agente sigue respondiendo hasta que un asesor escriba"],
+                [true, "El agente se pausa 2 horas"],
+              ] as const
+            ).map(([value, text]) => (
+              <button
+                key={String(value)}
+                type="button"
+                role="radio"
+                aria-checked={pauseOnHandoff === value}
+                onClick={() => setPauseOnHandoff(value)}
+                className={cn(
+                  "rounded-md border px-2.5 py-1 text-left text-xs transition-colors",
+                  pauseOnHandoff === value ? "border-wa bg-wa/15 text-foreground" : "border-border text-muted-foreground hover:bg-accent/50",
+                )}
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            En los dos casos la conversación queda marcada para el equipo. Cuando un asesor escribe o pulsa «Atender», el
+            agente deja de responder 2 horas (o hasta «Reactivar IA»).
+          </p>
+        </div>
       </div>
 
       <div className="flex justify-end">

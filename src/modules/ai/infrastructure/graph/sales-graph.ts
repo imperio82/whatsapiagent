@@ -179,6 +179,8 @@ export async function runSalesGraph(input: {
   handoffRules?: string[];
   /** Lo que se le dice al cliente al pasarlo a una persona (Mi agente); sin esto, el del perfil. */
   handoffMessage?: string | null;
+  /** Ya se avisó a un asesor y todavía no responde: el agente sigue atendiendo en vez de repetir el traspaso. */
+  handoffPending?: boolean;
   /** Voz del agente: cuándo responder con nota de voz y si el cliente mandó una */
   voice?: { policy: VoicePolicy; clientSentAudio: boolean };
 }): Promise<GraphTurnResult> {
@@ -222,8 +224,9 @@ export async function runSalesGraph(input: {
       new HumanMessage(transcript),
     ]);
     const chosen = parsed?.intent as string | undefined;
-    const intent: Intent =
-      chosen === "humano" || (chosen && profile.specialists[chosen]) ? chosen : profile.defaultIntent;
+    const valid: Intent = chosen === "humano" || (chosen && profile.specialists[chosen]) ? chosen : profile.defaultIntent;
+    // Si ya se avisó a un asesor, repetir el traspaso deja al cliente sin respuesta: lo atiende el especialista
+    const intent: Intent = valid === "humano" && input.handoffPending ? profile.defaultIntent : valid;
     const voz = (parsed as { voz?: boolean } | undefined)?.voz === true;
     return {
       intent,
@@ -232,7 +235,9 @@ export async function runSalesGraph(input: {
       trace: [{
         node: "router",
         type: "ruta",
-        detail: `${intent}: ${parsed?.reason ?? "sin razón"}${voiceRules ? (voz ? " · pide voz" : " · sin voz") : ""}`,
+        detail: `${intent}: ${parsed?.reason ?? "sin razón"}${valid !== intent ? " · un asesor ya está avisado, sigue el agente" : ""}${
+          voiceRules ? (voz ? " · pide voz" : " · sin voz") : ""
+        }`,
         ms: Date.now() - started,
       }],
     };

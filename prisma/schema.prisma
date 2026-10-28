@@ -37,6 +37,8 @@ model Tenant {
   aiPermissions            Json?
   // Lo que dice el agente al pasar la conversación a una persona; null = el texto por defecto del perfil
   aiHandoffMessage         String?
+  // Al pasar a un asesor: false = el agente sigue respondiendo hasta que un asesor escriba; true = pausa 2 horas
+  aiPauseOnHandoff         Boolean        @default(false)
   // Qué pasa con las ofertas del comprador (src/modules/ai/domain/offer-policy.ts); null = por defecto
   aiOfferPolicy            Json?
   // Tipo de agente: tienda (catálogo y pedidos) o intermediación (inventario de bienes, calificación y citas)

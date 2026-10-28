@@ -24,6 +24,8 @@ export interface CurrentTenantDto {
   aiPermissions: AgentPermissions | null;
   /** null: el mensaje por defecto del perfil */
   aiHandoffMessage: string | null;
+  /** Al pasar a un asesor: pausar la IA 2 horas (true) o seguir respondiendo hasta que un asesor escriba */
+  aiPauseOnHandoff: boolean;
   /** Con los valores por defecto completados */
   aiOfferPolicy: OfferPolicy;
   businessHours: string | null;
@@ -60,6 +62,7 @@ export function toCurrentTenantDto(tenant: TenantRow): CurrentTenantDto {
     aiPersonality: tenant.aiPersonality,
     aiPermissions: (tenant.aiPermissions as AgentPermissions | null) ?? null,
     aiHandoffMessage: tenant.aiHandoffMessage,
+    aiPauseOnHandoff: tenant.aiPauseOnHandoff,
     aiOfferPolicy: offerPolicyFrom(tenant.aiOfferPolicy),
     businessHours: tenant.businessHours,
     deliveryInfo: tenant.deliveryInfo,
