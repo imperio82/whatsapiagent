@@ -61,6 +61,8 @@ export interface GraphTurnResult {
   text: string;
   intent: Intent;
   handoff: boolean;
+  /** Por qué pasó a una persona: lo pidió el cliente o una herramienta, o la respuesta no pasó la verificación */
+  handoffReason: HandoffReason | null;
   trace: TraceStep[];
   tokensIn: number;
   cachedTokensIn: number;
@@ -74,8 +76,8 @@ export interface GraphTurnResult {
 
 const MAX_TOOL_STEPS = 5;
 const MAX_RETRIES = 1;
-const HANDOFF_MESSAGE =
-  "Ya paso tu mensaje a alguien del equipo 🙌 En un momento te responden por aquí.";
+
+export type HandoffReason = "cliente" | "herramienta" | "verificacion";
 
 const last = <T>(_a: T, b: T) => b;
 const TEXT_ONLY: VoiceDecision = { voice: false, alsoText: false, reason: "por texto" };
@@ -87,6 +89,7 @@ const State = Annotation.Root({
   attempts: Annotation<number>({ reducer: last, default: () => 0 }),
   correction: Annotation<string | null>({ reducer: last, default: () => null }),
   handoff: Annotation<boolean>({ reducer: last, default: () => false }),
+  handoffReason: Annotation<HandoffReason | null>({ reducer: last, default: () => null }),
   verified: Annotation<boolean>({ reducer: last, default: () => false }),
   voiceSuggested: Annotation<boolean>({ reducer: last, default: () => false }),
   delivery: Annotation<VoiceDecision>({ reducer: last, default: () => TEXT_ONLY }),
@@ -197,6 +200,8 @@ export async function runSalesGraph(input: {
   const turnContext = input.turnContext ? `\n\n${input.turnContext}` : "";
   // Lo que escribió el cliente: los montos que dio (presupuesto, oferta) se pueden repetir
   const clientText = input.history.filter((m) => m.role === "user").map((m) => m.content).join("\n");
+  // Lo que ya dijo el agente (verificado en su turno): puede repetir datos de un bien que ya mostró
+  const previousReplies = input.history.filter((m) => m.role === "assistant").map((m) => m.content).join("\n");
 
   // ── router: clasifica la intención con salida estructurada ──────────────
   async function router(state: GraphState): Promise<Partial<GraphState>> {
@@ -272,7 +277,7 @@ export async function runSalesGraph(input: {
           toolOutputs: outputs,
           usage,
           correction: null,
-          ...(outputs.some(asksForHandoff) ? { handoff: true } : {}),
+          ...(outputs.some(asksForHandoff) ? { handoff: true, handoffReason: "herramienta" as const } : {}),
         };
       }
 
@@ -314,12 +319,13 @@ export async function runSalesGraph(input: {
       // La ficha del cliente (pedidos anteriores) también es evidencia válida de códigos y precios
       businessContext: `${input.businessContext}${turnContext}`,
       clientText,
+      previousReplies,
     });
     const step: TraceStep = {
       node: "verificador",
       type: "verificacion",
       ok: result.ok,
-      detail: result.ok ? "precios y códigos verificados" : result.problems.join(" "),
+      detail: result.ok ? "precios, códigos y características verificados" : result.problems.join(" "),
     };
     if (result.ok) return { verified: true, trace: [step] };
     return {
@@ -358,8 +364,9 @@ export async function runSalesGraph(input: {
   // ── humano: entrega a una persona del equipo ─────────────────────────────
   function humano(state: GraphState): Partial<GraphState> {
     return {
-      reply: HANDOFF_MESSAGE,
+      reply: profile.handoffMessage,
       handoff: true,
+      handoffReason: state.intent === "humano" ? "cliente" : "verificacion",
       trace: [{
         node: "humano",
         type: "humano",
@@ -395,6 +402,7 @@ export async function runSalesGraph(input: {
     text: final.reply,
     intent: final.intent,
     handoff: final.handoff,
+    handoffReason: final.handoff ? final.handoffReason : null,
     trace: final.trace,
     tokensIn: final.usage.tokensIn,
     cachedTokensIn: final.usage.cachedTokensIn,

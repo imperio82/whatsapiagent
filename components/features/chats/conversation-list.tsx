@@ -77,7 +77,7 @@ export function ConversationList({
               <>
                 No hay conversaciones archivadas.
                 <br />
-                Archivá un chat para sacarlo del panel principal.
+                Archiva un chat para sacarlo del panel principal.
               </>
             ) : (
               <>

@@ -74,7 +74,7 @@ export function ClientPanel({ conversationId }: Props): React.ReactElement {
           <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
             {c.notes || (
               <span className="inline-flex items-center gap-1">
-                <StickyNote className="h-3 w-3" /> Sin notas. Hacé clic para agregar una.
+                <StickyNote className="h-3 w-3" /> Sin notas. Haz clic para agregar una.
               </span>
             )}
           </div>

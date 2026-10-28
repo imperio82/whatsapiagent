@@ -102,7 +102,7 @@ export function MetaConfigCard(): React.ReactElement {
                   autoComplete="off"
                 />
                 <p className="text-xs text-muted-foreground">
-                  El token temporal dura 24 horas. Para que no venza, generá uno permanente con un
+                  El token temporal dura 24 horas. Para que no venza, genera uno permanente con un
                   usuario del sistema en Meta Business. Se guarda cifrado.
                 </p>
               </div>
@@ -111,7 +111,7 @@ export function MetaConfigCard(): React.ReactElement {
                 <p className="text-sm text-destructive">
                   {save.error instanceof Error
                     ? save.error.message
-                    : "No se pudo guardar. Revisá las credenciales e intentá de nuevo."}
+                    : "No se pudo guardar. Revisa las credenciales e intenta de nuevo."}
                 </p>
               )}
               {save.isSuccess && (
@@ -149,8 +149,8 @@ export function MetaConfigCard(): React.ReactElement {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Pegá esta URL en tu app → WhatsApp → Configuración → Webhook. Como token de
-                verificación usá el valor de <code>WHATSAPP_WEBHOOK_VERIFY_TOKEN</code> y suscribite
+                Pega esta URL en tu app → WhatsApp → Configuración → Webhook. Como token de
+                verificación usa el valor de <code>WHATSAPP_WEBHOOK_VERIFY_TOKEN</code> y suscríbete
                 al campo <strong>messages</strong>.
               </p>
             </div>

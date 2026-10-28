@@ -17,7 +17,7 @@ export function authorize(...required: string[]): void {
   });
 
   if (!has) {
-    throw new ForbiddenError("No tenés permisos suficientes", { required });
+    throw new ForbiddenError("No tienes permisos suficientes", { required });
   }
 }
 

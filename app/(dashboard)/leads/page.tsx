@@ -73,7 +73,7 @@ export default function LeadsPage(): React.ReactElement {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Pipeline de leads</h1>
           <p className="text-sm text-muted-foreground">
-            Captá contactos por WhatsApp, hacelos avanzar hasta cerrar la venta.
+            Capta contactos por WhatsApp y hazlos avanzar hasta cerrar la venta.
           </p>
         </div>
         <Dialog open={creating} onOpenChange={setCreating}>
@@ -343,7 +343,7 @@ function CreateLeadDialog({ onClose }: { onClose: () => void }) {
       <DialogHeader>
         <DialogTitle>Nuevo lead</DialogTitle>
         <DialogDescription>
-          Capturá datos de un prospecto. Después podés hacerlo avanzar por el pipeline.
+          Captura los datos de un prospecto. Después puedes hacerlo avanzar por el pipeline.
         </DialogDescription>
       </DialogHeader>
       <form

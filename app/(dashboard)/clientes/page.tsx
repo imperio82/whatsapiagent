@@ -137,7 +137,7 @@ function CreateClientDialog({ onClose }: { onClose: () => void }) {
       <DialogHeader>
         <DialogTitle>Nuevo cliente</DialogTitle>
         <DialogDescription>
-          Cargá manualmente datos de un cliente que conociste por otro canal.
+          Carga manualmente los datos de un cliente que conociste por otro canal.
         </DialogDescription>
       </DialogHeader>
       <form

@@ -7,14 +7,14 @@ export default function RegisterPage(): React.ReactElement {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Crear cuenta</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Registrá tu negocio y empezá a vender por WhatsApp en minutos.
+          Registra tu negocio y empieza a vender por WhatsApp en minutos.
         </p>
       </div>
       <RegisterForm />
       <div className="mt-6 text-center text-sm text-muted-foreground">
-        ¿Ya tenés cuenta?{" "}
+        ¿Ya tienes cuenta?{" "}
         <Link href="/login" className="font-medium text-foreground hover:underline">
-          Iniciá sesión
+          Inicia sesión
         </Link>
       </div>
     </div>

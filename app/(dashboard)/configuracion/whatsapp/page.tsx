@@ -38,7 +38,7 @@ export default function WhatsAppConfigPage(): React.ReactElement {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">WhatsApp</h1>
         <p className="text-sm text-muted-foreground">
-          Vinculá tu número para recibir y responder mensajes desde Atiendo IA.
+          Vincula tu número para recibir y responder mensajes desde Atiendo IA.
         </p>
       </div>
 
@@ -102,19 +102,19 @@ export default function WhatsAppConfigPage(): React.ReactElement {
               <div className="flex-1 space-y-3">
                 <div className="flex items-center gap-2">
                   <QrCode className="h-4 w-4 text-wa" />
-                  <span className="text-sm font-semibold">Escaneá este QR</span>
+                  <span className="text-sm font-semibold">Escanea este QR</span>
                 </div>
                 <ol className="ml-4 list-decimal space-y-1 text-sm text-muted-foreground">
-                  <li>Abrí WhatsApp en tu celular.</li>
+                  <li>Abre WhatsApp en tu celular.</li>
                   <li>
-                    Andá a <strong>Configuración → Dispositivos vinculados</strong>.
+                    Ve a <strong>Configuración → Dispositivos vinculados</strong>.
                   </li>
                   <li>
-                    Tocá <strong>Vincular un dispositivo</strong> y apuntá la cámara al QR.
+                    Toca <strong>Vincular un dispositivo</strong> y apunta la cámara al QR.
                   </li>
                 </ol>
                 <div className="text-xs text-muted-foreground">
-                  El QR se renueva automáticamente. Si vence antes de escanear, esperá unos segundos.
+                  El QR se renueva automáticamente. Si vence antes de escanear, espera unos segundos.
                 </div>
                 <Button
                   variant="outline"
@@ -149,7 +149,7 @@ export default function WhatsAppConfigPage(): React.ReactElement {
           ) : (
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm text-muted-foreground">
-                No hay sesión activa. Vinculá tu número para empezar.
+                No hay sesión activa. Vincula tu número para empezar.
               </div>
               <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
                 {connect.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -4,7 +4,7 @@ import { SIMULATED_DOMAIN } from "@shared/domain/wa-jid";
 import type { AIProvider, ChatMessage, ChatTurnOutput } from "../domain/ports/ai-provider";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
 import { buildBusinessContext, buildSystemPrompt, buildTurnContext, type SystemPromptInput } from "../infrastructure/system-prompt";
-import { runSalesGraph, type TraceStep } from "../infrastructure/graph/sales-graph";
+import { runSalesGraph, type HandoffReason, type TraceStep } from "../infrastructure/graph/sales-graph";
 import { buildTools } from "../infrastructure/tools";
 import { buildBrokerageTools, formatLeadQualification } from "../infrastructure/brokerage-tools";
 import { loadActiveRules } from "../infrastructure/ai-rules";
@@ -69,6 +69,8 @@ interface TurnResult extends ChatTurnOutput {
   provider: string;
   intent?: string;
   handoff?: boolean;
+  /** "verificacion": la respuesta no pasó el verificador; el cliente no pidió a nadie, así que la IA no se pausa */
+  handoffReason?: HandoffReason | null;
   trace?: TraceStep[];
   delivery?: VoiceDecision;
   /** De tokensIn, los servidos desde la caché del proveedor */
@@ -387,7 +389,11 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       data: {
         lastMessageAt: sent!.sentAt,
         ...(result.handoff
-          ? { status: "PENDING_REVIEW", aiPausedUntil: new Date(Date.now() + HANDOFF_PAUSE_MS) }
+          ? {
+              status: "PENDING_REVIEW",
+              // Si fue el verificador, el equipo queda avisado pero el agente sigue respondiendo lo que sí puede
+              ...(result.handoffReason === "verificacion" ? {} : { aiPausedUntil: new Date(Date.now() + HANDOFF_PAUSE_MS) }),
+            }
           : {}),
       },
     });

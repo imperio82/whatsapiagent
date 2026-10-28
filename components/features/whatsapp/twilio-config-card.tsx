@@ -89,7 +89,7 @@ export function TwilioConfigCard(): React.ReactElement {
                 />
                 {account?.hasAuthToken && (
                   <p className="text-xs text-muted-foreground">
-                    Ya hay un token guardado. Escribilo de nuevo solo si querés reemplazarlo.
+                    Ya hay un token guardado. Escríbelo de nuevo solo si quieres reemplazarlo.
                   </p>
                 )}
               </div>
@@ -111,7 +111,7 @@ export function TwilioConfigCard(): React.ReactElement {
 
               {save.isError && (
                 <p className="text-sm text-destructive">
-                  No se pudo guardar. Revisá las credenciales e intentá de nuevo.
+                  No se pudo guardar. Revisa las credenciales e intenta de nuevo.
                 </p>
               )}
               {save.isSuccess && (
@@ -147,7 +147,7 @@ export function TwilioConfigCard(): React.ReactElement {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Pegá esta URL en Twilio → WhatsApp Sandbox Settings → &quot;When a message comes
+                Pega esta URL en Twilio → WhatsApp Sandbox Settings → &quot;When a message comes
                 in&quot; (método POST).
               </p>
             </div>

@@ -23,13 +23,13 @@ const SYSTEM_PROMPT = `Eres experto en mensajes en frío por WhatsApp para capta
 REGLAS:
 - Mensajes BREVES (máximo 2 oraciones, ideal 1).
 - Tono humano, NO de bot. Nada de "Estimado/a".
-- Personalizá con los datos del lead, NO inventes datos.
-- Hacé UNA pregunta concreta al final para generar respuesta.
-- No vendas en el primer mensaje, despertá curiosidad.
+- Personaliza con los datos del lead, NO inventes datos.
+- Haz UNA pregunta concreta al final para generar respuesta.
+- No vendas en el primer mensaje, despierta curiosidad.
 - Sin emojis excesivos (máximo uno si encaja).
-- Español rioplatense/latinoamericano informal pero profesional.
+- Español de Colombia, trato de usted, cordial y profesional (nunca voseo: nada de "tenés", "podés", "querés").
 
-FORMATO: devolvé SOLO el texto del mensaje. Sin comillas, sin prefacio, sin firma.`;
+FORMATO: devuelve SOLO el texto del mensaje. Sin comillas, sin prefacio, sin firma.`;
 
 export class GenerateOpenerUseCase
   implements UseCase<GenerateOpenerInput, GeneratedOpenerDto[]>
@@ -62,8 +62,8 @@ export class GenerateOpenerUseCase
         ? `- Motivo por el que no compró antes: ${lead.reasonNotBought}`
         : null,
       "",
-      `Generá ${variants} versiones distintas de abridor para enviar por WhatsApp, en tono ${tone}.`,
-      `Devolvé UNA POR LÍNEA, sin numerar, sin viñetas. Solo el texto.`,
+      `Genera ${variants} versiones distintas de abridor para enviar por WhatsApp, en tono ${tone}.`,
+      `Devuelve UNA POR LÍNEA, sin numerar, sin viñetas. Solo el texto.`,
     ]
       .filter(Boolean)
       .join("\n");

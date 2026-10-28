@@ -42,6 +42,15 @@ function attributesText(attributes: Prisma.JsonValue | null): string {
     .join(", ");
 }
 
+const STATUS_LABEL: Partial<Record<ListingRow["status"], string>> = {
+  AVAILABLE: "AVAILABLE",
+  RESERVED: "RESERVED (reservado)",
+  SOLD: "SOLD (ya se vendió)",
+};
+
+/** Sin fotos el modelo igual las ofrecía ("¿quiere ver fotos?"): se le dice en el mismo resultado. */
+const NO_PHOTOS = "Este bien no tiene fotos: no ofrezcas fotos. Si el cliente las pide, dile que un asesor se las envía.";
+
 /** Lo que el comprador puede saber del bien. Sin datos del propietario. */
 function publicListing(l: ListingRow, withPhotos: boolean) {
   // Sin el id interno: el agente se refiere a los bienes por nombre o código (findListing acepta ambos)
@@ -54,8 +63,9 @@ function publicListing(l: ListingRow, withPhotos: boolean) {
     city: l.city,
     zone: l.zone,
     details: attributesText(l.attributes),
-    status: l.status === "RESERVED" ? "RESERVED (reservado)" : "AVAILABLE",
+    status: STATUS_LABEL[l.status] ?? "AVAILABLE",
     ...(withPhotos ? { description: l.description, photos: l.photos.slice(0, 5) } : { photosCount: l.photos.length }),
+    ...(l.photos.length === 0 ? { fotos: NO_PHOTOS } : {}),
   };
 }
 
@@ -175,6 +185,27 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
   const shared = buildTools(tenantId, ctx).filter((t) => SHARED.has(t.name));
   const scheduling = ctx.scheduling ?? new SchedulingService();
 
+  /** Los vendidos que coinciden con la búsqueda (máximo 2), solo para decir que ya se vendieron. */
+  const soldMatches = async (query: string, filters: { kind: "VEHICLE" | "PROPERTY" | null; operation: "SALE" | "RENT" | null }) => {
+    const sold = await prisma.listing.findMany({
+      where: {
+        tenantId,
+        status: "SOLD",
+        ...(filters.kind ? { kind: filters.kind } : {}),
+        ...(filters.operation ? { operation: filters.operation } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+      take: MAX_INVENTORY_SCAN,
+    });
+    const searchable = sold.map((l) => ({
+      listing: l,
+      name: l.title,
+      sku: l.code,
+      description: [l.description, l.zone, l.city].filter(Boolean).join(" "),
+    }));
+    return rankProducts(query, searchable, 2).map((s) => ({ code: s.listing.code, title: s.listing.title, zone: s.listing.zone, city: s.listing.city, status: "SOLD (ya se vendió)" }));
+  };
+
   return [
     ...shared,
 
@@ -227,6 +258,15 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
         };
 
         const found = await search({ city, maxPrice });
+        // Si pregunta por uno que ya se vendió ("¿todavía está el de Chipre?"), se le dice en vez de "no lo tengo"
+        const sold = query ? await soldMatches(query, { kind, operation }) : [];
+        if (sold.length > 0) {
+          return JSON.stringify({
+            resultados: found,
+            vendidos: sold,
+            nota: "Los de 'vendidos' ya se vendieron. Si el cliente preguntaba por uno de ellos, dile que ya se vendió y ofrécele los parecidos de 'resultados'.",
+          });
+        }
         if (found.length > 0) return JSON.stringify(found);
 
         // Sin resultados con ciudad o presupuesto: el modelo a veces los supone. Se busca sin ellos
@@ -258,8 +298,15 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
         additionalProperties: false,
       },
       async execute(args) {
-        const listing = await findListing(tenantId, args.listing);
-        if (!listing || !["AVAILABLE", "RESERVED"].includes(listing.status)) return LISTING_NOT_FOUND;
+        // También los vendidos: si pregunta por uno, se le dice que ya se vendió (no que no existe)
+        const listing = await findListing(tenantId, args.listing, ["AVAILABLE", "RESERVED", "SOLD"]);
+        if (!listing || !["AVAILABLE", "RESERVED", "SOLD"].includes(listing.status)) return LISTING_NOT_FOUND;
+        if (listing.status === "SOLD") {
+          return JSON.stringify({
+            ...publicListing(listing, false),
+            nota: "Este bien ya se vendió. Díselo al cliente y ofrécele parecidos con search_listings.",
+          });
+        }
         return JSON.stringify(publicListing(listing, true));
       },
     },
@@ -559,10 +606,27 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
       async execute(args) {
         const client = await clientOf(tenantId, ctx);
         if (!client) return JSON.stringify({ error: "no hay un cliente asociado a la conversación" });
-        const listing = await findListing(tenantId, args.listing);
+        const listing = await findListing(tenantId, args.listing, ["AVAILABLE", "RESERVED", "SOLD"]);
         if (!listing) return LISTING_NOT_FOUND;
-        const offer = amount(args.offerAmount);
-        if (!offer) return JSON.stringify({ error: "valor_invalido", detalle: "El valor debe ser un número en pesos, por ejemplo 90000000." });
+        const offered = amount(args.offerAmount);
+        if (!offered) return JSON.stringify({ error: "valor_invalido", detalle: "El valor debe ser un número en pesos, por ejemplo 90000000." });
+
+        // Reservado o vendido: no se registra la oferta; se le ofrece avisarle si se libera
+        if (listing.status !== "AVAILABLE") {
+          const sold = listing.status === "SOLD";
+          return JSON.stringify({
+            ok: false,
+            error: sold ? "bien_vendido" : "bien_reservado",
+            mensaje: sold
+              ? "Este bien ya se vendió: no registres la oferta. Díselo y ofrécele parecidos con search_listings."
+              : "Este bien está reservado: no registres la oferta ni digas que la registraste. Dile que está reservado, ofrécele avisarle si se libera (guarda lo que busca con qualify_lead) y muéstrale parecidos con search_listings.",
+          });
+        }
+
+        // Ofrecer el precio publicado o más es aceptar ese precio: nunca se cobra más de lo publicado
+        const price = Number(listing.priceCop);
+        const acceptsPrice = price > 0 && offered >= price;
+        const offer = acceptsPrice ? price : offered;
 
         const lead = await openLead(tenantId, client, "BUYER");
         const repeated = lead.offerCop === BigInt(offer) && lead.listingId === listing.id && Date.now() - lead.updatedAt.getTime() < DEDUP_WINDOW_MS;
@@ -575,10 +639,28 @@ export function buildBrokerageTools(tenantId: string, ctx: BrokerageToolContext)
             productInterest: listing.title,
             stage: "READY_TO_BUY",
             temperature: "HOT",
-            aiSummary: `Ofreció ${formatCop(offer)} por ${listing.title} (publicado en ${formatCop(listing.priceCop)})${conditions ? `, ${conditions}` : ""}.`,
+            aiSummary: acceptsPrice
+              ? `Acepta el precio publicado de ${formatCop(price)} por ${listing.title}${offered > price ? ` (ofreció ${formatCop(offered)})` : ""}${conditions ? `, ${conditions}` : ""}.`
+              : `Ofreció ${formatCop(offer)} por ${listing.title} (publicado en ${formatCop(listing.priceCop)})${conditions ? `, ${conditions}` : ""}.`,
             lastContactAt: new Date(),
           },
         });
+
+        if (acceptsPrice) {
+          // Sin traspaso: el agente sigue con el cierre (nombre y visita o separación) y el asesor ya queda avisado
+          if (!repeated) {
+            await notify(
+              `🔥 Cierre: ${clientLabel(client)} acepta el precio publicado de ${formatCop(price)} por ${listing.title} (${listing.code})${conditions ? `. Condiciones: ${conditions}` : ""}. El agente le propone visita o separación.`,
+            );
+          }
+          return JSON.stringify({
+            ok: true,
+            offerPrice: price,
+            aceptaPrecio: true,
+            mensaje: `El cliente ofreció ${formatCop(offered)} y el precio publicado es ${formatCop(price)}: queda registrado por ${formatCop(price)}. Dile que no tiene que pagar más del precio publicado, pídele su nombre completo si aún no lo tienes y proponle una visita (request_visit) o la separación del bien con un asesor.`,
+          });
+        }
+
         if (!repeated) {
           await notify(
             `💰 Oferta: ${clientLabel(client)} ofrece ${formatCop(offer)} por ${listing.title} (${listing.code}), publicado en ${formatCop(listing.priceCop)}${conditions ? `. Condiciones: ${conditions}` : ""}. La conversación queda contigo.`,

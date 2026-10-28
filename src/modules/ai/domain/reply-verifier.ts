@@ -13,6 +13,8 @@ export interface VerificationEvidence {
   businessContext: string;
   /** Lo que escribió el cliente: puede repetirle su presupuesto, su oferta o su número. */
   clientText?: string;
+  /** Respuestas anteriores del agente (ya verificadas): puede repetir lo que dijo de un bien. */
+  previousReplies?: string;
 }
 
 export interface VerificationResult {
@@ -122,6 +124,67 @@ function isSupported(price: number, evidence: number[]): boolean {
   });
 }
 
+const NUMBER_WORDS: Record<string, number> = { un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6 };
+const plain = (text: string) => text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+/** Habitaciones, baños o área: cómo se llama cada una al escribirla. */
+function featureOf(word: string): "habitaciones" | "banos" | "m2" | null {
+  if (/^(habitacion|alcoba|cuarto|dormitorio)/.test(word)) return "habitaciones";
+  if (/^bano/.test(word)) return "banos";
+  if (/^(m2|m²|mts|metros)/.test(word)) return "m2";
+  return null;
+}
+
+/**
+ * Características numéricas de un inmueble que aparecen en un texto, como "habitaciones:3": "3 habitaciones",
+ * "tres alcobas", "2 baños", "72 m²", y también al revés, como en las fichas ("Habitaciones: 3", "Área: 72 m²").
+ */
+export function extractFeatureClaims(text: string): string[] {
+  const t = plain(text);
+  const out = new Set<string>();
+  const value = (v: string) => NUMBER_WORDS[v] ?? Number(v.replace(",", "."));
+  // "3 habitaciones", "tres alcobas", "2 baños", "72 m²"
+  const forward =
+    /(?<![\w.,])(\d+(?:[.,]\d+)?|un|una|uno|dos|tres|cuatro|cinco|seis)\s*(habitacion(?:es)?|alcobas?|cuartos?|dormitorios?|banos?|m2|m²|mts2?|metros cuadrados)/g;
+  for (const m of t.matchAll(forward)) {
+    const feature = featureOf(m[2]!);
+    if (feature) out.add(`${feature}:${value(m[1]!)}`);
+  }
+  // Como en las fichas: "Habitaciones: 3", "Área: 72 m²"
+  for (const m of t.matchAll(/(habitaciones|alcobas|cuartos|dormitorios|banos|area)\W{1,4}(\d+(?:[.,]\d+)?)/g)) {
+    const feature = m[1] === "area" ? "m2" : featureOf(m[1]!);
+    if (feature) out.add(`${feature}:${value(m[2]!)}`);
+  }
+  return [...out];
+}
+
+/** Afirma que el inmueble acepta mascotas ("acepta mascotas", "se admiten mascotas"), no que lo va a confirmar. */
+function claimsPetsAllowed(text: string): boolean {
+  return /(?<!no |no se |si |si se )\b(acepta|aceptan|admite|admiten|permite|permiten)\s+mascotas/.test(plain(text));
+}
+
+/**
+ * Lo que el agente dice de un inmueble (habitaciones, baños, área, mascotas) debe estar en una ficha que trajo una
+ * herramienta, en lo que ya dijo antes o en lo que dijo el cliente. Así no inventa "3 habitaciones" si la ficha no
+ * lo dice.
+ */
+export function verifyFeatureClaims(reply: string, evidence: VerificationEvidence): string[] {
+  const sources = [...evidence.toolOutputs, evidence.clientText ?? "", evidence.previousReplies ?? "", evidence.businessContext];
+  const known = new Set(sources.flatMap(extractFeatureClaims));
+  const problems: string[] = [];
+  for (const claim of extractFeatureClaims(reply)) {
+    if (!known.has(claim)) {
+      const [feature, n] = claim.split(":");
+      const label = feature === "m2" ? `${n} m²` : `${n} ${feature === "banos" ? "baños" : "habitaciones"}`;
+      problems.push(`Dices "${label}", pero eso no está en la ficha del bien. Di solo lo que trae la ficha; si falta el dato, di que un asesor lo confirma.`);
+    }
+  }
+  if (claimsPetsAllowed(reply) && !sources.some((s) => /mascota/i.test(s))) {
+    problems.push("Dices que acepta mascotas, pero la ficha no lo dice. Di que un asesor lo confirma.");
+  }
+  return problems;
+}
+
 export function verifyReply(reply: string, evidence: VerificationEvidence): VerificationResult {
   const problems: string[] = [];
   if (!reply.trim()) problems.push("La respuesta está vacía.");
@@ -153,6 +216,8 @@ export function verifyReply(reply: string, evidence: VerificationEvidence): Veri
       problems.push(`La respuesta incluye el teléfono ${phone}, que no es del negocio ni del cliente. No compartas teléfonos de terceros.`);
     }
   }
+
+  problems.push(...verifyFeatureClaims(reply, evidence));
 
   return { ok: problems.length === 0, problems };
 }
