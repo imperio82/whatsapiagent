@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -75,9 +75,30 @@ const STATUS_LABEL = { ACTIVE: "Activo", SUSPENDED: "Suspendido", CANCELLED: "Ca
 
 type EntryMode = { tenant: PlatformTenantDto; kind: "PAYMENT" | "CREDIT" };
 
+type Section = "negocios" | "recargas" | "limites" | "ia" | "voz";
+
+const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "negocios", label: "Negocios y cobros", icon: Building2 },
+  { id: "recargas", label: "Recargas", icon: Coins },
+  { id: "limites", label: "Límites y prueba gratis", icon: TriangleAlert },
+  { id: "ia", label: "Modelo del agente", icon: Cpu },
+  { id: "voz", label: "Voz", icon: MessageSquare },
+];
+
 export function PlatformPanel(): React.ReactElement {
   const currentMonth = monthKey(new Date());
   const [month, setMonth] = useState(currentMonth);
+  const [section, setSection] = useState<Section>("negocios");
+
+  // La sección va en la dirección (#voz) para poder volver a ella o compartirla
+  useEffect(() => {
+    const fromHash = window.location.hash.slice(1);
+    if (SECTIONS.some((s) => s.id === fromHash)) setSection(fromHash as Section);
+  }, []);
+  const go = (id: Section) => {
+    setSection(id);
+    window.history.replaceState(null, "", `#${id}`);
+  };
   const { data, isLoading } = usePlatformOverview(month);
   const update = useUpdateTenantBilling();
   const [query, setQuery] = useState("");
@@ -119,7 +140,34 @@ export function PlatformPanel(): React.ReactElement {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+      <div className="grid gap-6 md:grid-cols-[12rem_minmax(0,1fr)]">
+        <nav aria-label="Secciones del admin" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <ul className="flex gap-1 md:sticky md:top-4 md:flex-col">
+            {SECTIONS.map((s) => {
+              const Icon = s.icon;
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    onClick={() => go(s.id)}
+                    aria-current={section === s.id ? "page" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm transition-colors",
+                      section === s.id ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" /> {s.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className="min-w-0 space-y-6">
+      {section === "negocios" && (
+      <>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-8">
         <Stat icon={Building2} label="Negocios activos" value={totals ? `${totals.activeTenants} de ${totals.tenants}` : "—"} />
         <Stat icon={Banknote} label="Ingreso mensual" value={totals ? cop.format(totals.mrrCop) : "—"} hint="Activos y al día" />
         <Stat icon={Coins} label="Pagos del mes" value={totals ? cop.format(totals.paymentsCop) : "—"} />
@@ -158,18 +206,6 @@ export function PlatformPanel(): React.ReactElement {
           warn={!!totals && totals.overdue > 0}
         />
       </div>
-
-      <RechargesCard />
-
-      <UsageLimitsCard month={month} />
-
-      <TrialCard />
-
-      <AgentModelCard />
-
-      <VoiceModelCard />
-
-      <ElevenLabsCard />
 
       <Card>
         <div className="flex items-center gap-3 border-b border-border p-3">
@@ -355,6 +391,28 @@ export function PlatformPanel(): React.ReactElement {
           encima del cupo: desde {cop.format(EXTRA_CHAT_COP)}.
         </li>
       </ul>
+      </>
+      )}
+
+      {section === "recargas" && <RechargesCard />}
+
+      {section === "limites" && (
+        <>
+          <UsageLimitsCard month={month} />
+          <TrialCard />
+        </>
+      )}
+
+      {section === "ia" && <AgentModelCard />}
+
+      {section === "voz" && (
+        <>
+          <VoiceModelCard />
+          <ElevenLabsCard />
+        </>
+      )}
+        </div>
+      </div>
 
       {entry && <EntryDialog key={`${entry.tenant.id}-${entry.kind}`} mode={entry} onClose={() => setEntry(null)} />}
       <HistoryDialog tenant={history} onClose={() => setHistory(null)} />
