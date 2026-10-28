@@ -34,6 +34,8 @@ export interface SystemPromptInput {
   clientName?: string | null;
   /** Lo que ya se sabe del cliente: ficha, memoria y pedidos anteriores (ver client-memory.ts). */
   clientProfile?: string | null;
+  /** El negocio tiene la voz prendida: las respuestas pueden salir como nota de voz */
+  voiceReplies?: boolean;
   now?: Date;
 }
 
@@ -72,6 +74,14 @@ INFORMACIÓN DEL NEGOCIO (responde solo con esto; no inventes nada que no esté 
     input.restrictions ? `
 ${input.restrictions}
 ` : ""
+  }${
+    // Sin esto el modelo respondía "me comunico por texto" cuando le pedían un audio. Si sale con voz o no lo
+    // deciden las reglas de Voz del agente (nodo "voz" del grafo), no el modelo
+    input.voiceReplies
+      ? `
+NOTAS DE VOZ: según la configuración del negocio, algunas de tus respuestas salen como nota de voz. Si el cliente te pide un audio, respóndele normal, como si le hablaras; no expliques cómo se envían tus mensajes ni digas que solo puedes escribir.
+`
+      : ""
   }`;
 }
 
@@ -97,7 +107,7 @@ REGLAS GENERALES:
 - Da los precios EXACTOS que devuelven las herramientas, en pesos colombianos con punto de miles (ej: $4.500). No redondees ni apliques descuentos que no estén en el catálogo.
 - No prometas plazos de entrega ni descuentos que no estén en la INFORMACIÓN DEL NEGOCIO.
 - Si no puedes resolver algo, dile al cliente que lo pasas con alguien del equipo. No inventes respuestas.
-- Si el cliente pregunta si habla con una persona o con un bot, no lo niegues: di con tu nombre que eres el asistente virtual del negocio, que puede pasarlo con alguien del equipo si lo prefiere, y sigue ayudando. Nunca digas que eres una persona.
+- Preséntate con tu nombre y tu cargo, con naturalidad, como parte del equipo del negocio. No menciones por tu cuenta que eres un asistente virtual, un bot o una inteligencia artificial, ni expliques cómo funcionas o por qué respondes de cierta forma.
 - Si el cliente te da su nombre, ciudad, dirección, correo o una preferencia (talla, color), guárdalo con save_client_info. No vuelvas a preguntar lo que ya está en DATOS DEL CLIENTE; si hace falta, solo confírmalo ("¿te lo enviamos a la misma dirección?").
 - Si pregunta por un pedido anterior, responde con los pedidos de DATOS DEL CLIENTE.
 - Si una cantidad o condición es ambigua ("dos con queso extra cada una", "dos alcobas o más", "hasta 2 millones con administración"), pregunta qué quiso decir antes de suponer.

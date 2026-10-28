@@ -274,6 +274,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       collections: collectionsCatalog(collections),
       clientName: clientName && !/^Cliente \d+$/.test(clientName) ? clientName : null,
       clientProfile: [clientProfile, qualification].filter(Boolean).join("\n\n") || null,
+      voiceReplies: voicePolicy.enabled,
     };
 
     const toolContext = {
