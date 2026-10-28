@@ -4,6 +4,7 @@ import { SIMULATED_DOMAIN } from "@shared/domain/wa-jid";
 import type { AIProvider, ChatMessage, ChatTurnOutput } from "../domain/ports/ai-provider";
 import type { WhatsAppProvider } from "@modules/whatsapp/domain/ports/whatsapp-provider";
 import { buildBusinessContext, buildSystemPrompt, buildTurnContext, type SystemPromptInput } from "../infrastructure/system-prompt";
+import { offerPolicyFrom } from "../domain/offer-policy";
 import { runSalesGraph, type HandoffReason, type TraceStep } from "../infrastructure/graph/sales-graph";
 import { buildTools } from "../infrastructure/tools";
 import { buildBrokerageTools, formatLeadQualification } from "../infrastructure/brokerage-tools";
@@ -284,6 +285,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
       profile === "BROKERAGE"
         ? buildBrokerageTools(tenantId, {
             ...toolContext,
+            offerPolicy: offerPolicyFrom(tenant.aiOfferPolicy),
             notifyOwner: tenant.ownerNotifyPhone
               ? async (text) => {
                   await this.whatsapp.sendText(tenantId, { to: tenant.ownerNotifyPhone!, text });
@@ -310,6 +312,7 @@ export class RespondToMessageUseCase implements UseCase<RespondInput, void> {
           tools,
           profile: GRAPH_PROFILES[profile],
           handoffRules: rules.filter((r) => r.category === "HANDOFF").map((r) => r.content),
+          handoffMessage: tenant.aiHandoffMessage,
           voice: { policy: voicePolicy, clientSentAudio },
         });
         result = { ...graph };

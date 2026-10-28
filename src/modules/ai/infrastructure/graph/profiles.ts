@@ -22,7 +22,7 @@ export interface GraphProfile {
   businessLabel: string;
   /** Aclaraciones que van al final del prompt del router, después de las reglas del negocio, para que pesen más. */
   routerExceptions?: string;
-  /** Lo que se le dice al cliente al pasar la conversación a una persona, con el trato del perfil. */
+  /** Lo que se le dice al cliente al pasar la conversación a una persona, si el negocio no escribió el suyo. */
   handoffMessage: string;
 }
 
